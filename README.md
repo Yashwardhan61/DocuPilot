@@ -11,7 +11,17 @@
 - **GitHub Repository**: [https://github.com/Yashwardhan61/DocuPilot.git](https://github.com/Yashwardhan61/DocuPilot.git)
 - **Live Local Frontend**: `http://localhost:5173`
 - **Interactive API Documentation**: `http://localhost:8000/docs`
-- **Video Demo (2 to 3 minutes)**: [Insert Unlisted YouTube or Google Drive Link]
+- **Video Demo**: [Watch Full Demo Video on Google Drive](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
+
+---
+
+## Video Demonstration
+
+Click the video player below to watch the complete 2 to 3 minute walkthrough of DocuPilot in action:
+
+[![DocuPilot Video Demo Player](docs/screenshots/video_player_preview.png)](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
+
+*Click the banner above to launch the interactive video player directly on Google Drive.*
 
 ---
 
@@ -38,16 +48,28 @@ DocuPilot transforms passive circular reading into proactive execution:
    - **Ph.D. / Dual Degree** (5 Years): Year 4 is Pre-Final Year; Year 5 is Final Year.
    - **AI Degree Analysis**: Endpoints analyze any custom or non-standard degree via Gemini and university curriculum rules.
 6. **Course-Aware Deterministic Eligibility Engine**: Evaluates student CPI, active backlogs, department aliases, and relative academic standing against circular requirements without hallucination.
-7. **Direct Automated Calendar Synchronization**: When a student is evaluated as eligible, 12-hour and 3-hour prior reminder alerts are directly scheduled in their calendar in the background without requiring manual redirects.
-8. **Grounded Notice Q&A**: Allows students to ask contextual questions about any circular, answered strictly from document contents.
-9. **Student Action Dashboard**: A clean, light-themed React/Tailwind web interface with an adaptive profile switcher, dynamic year clamping, and task checklist.
+7. **Missed Deadline Detection**: Automatically flags dates in the past with visual strike-through and prominent indicators, preventing students from setting reminders for expired deadlines.
+8. **Simultaneous Google Calendar Intent & 1-Click .ics Sync**:
+   - **Direct Google Calendar Web Intent**: Opens in a new tab with pre-filled title, dates, verbatim notice snippet, and milestone notes without requiring sensitive OAuth scopes or triggering unverified app warning screens.
+   - **RFC 5545 Dual-Alarm .ics Download**: Simultaneously downloads a single-event calendar file configured with both 12-hour (`-PT12H`) and 3-hour (`-PT3H`) prior reminder alarms, compatible with Google Calendar, Apple Calendar, and Outlook.
+9. **Grounded Notice Q&A**: Allows students to ask contextual questions about any circular, answered strictly from document contents.
+10. **Student Action Dashboard**: A clean, light-themed React/Tailwind web interface with an adaptive profile switcher, dynamic year clamping, and task checklist.
 
 ---
 
-## Application Screenshot
+## Application Screenshots
 
-![DocuPilot Dashboard](docs/screenshots/docupilot_dashboard.png)
-*DocuPilot Dashboard: Ingesting an official placement circular, displaying extracted deadlines, live student eligibility evaluation, and grounded notice Q&A.*
+### 1. Notice Ingestion & Multimodal Upload
+![DocuPilot Notice Upload](docs/screenshots/docupilot_upload.png)
+*DocuPilot Upload Interface: Drag-and-drop support for official circular PDFs, scanned images, and plain text announcements.*
+
+### 2. Extraction Dashboard, Eligibility Evaluation & Missed Deadline Detection
+![DocuPilot Extraction Dashboard](docs/screenshots/docupilot_extraction.png)
+*DocuPilot Dashboard: Extracted registration notice, deterministic eligibility check against student profile, and automatic expired deadline detection.*
+
+### 3. Dual-Alarm Calendar Synchronization & RFC 5545 .ics Integration
+![DocuPilot Calendar Sync and ICS](docs/screenshots/calendar_sync_and_ics.png)
+*Calendar Integration: Simultaneous Google Calendar Web Intent launch and RFC 5545 single-event .ics file with both 12-hour and 3-hour prior reminder alarms.*
 
 ---
 
@@ -64,7 +86,7 @@ flowchart TD
     
     E --> G["Eligibility Verdict Card\n(Instant Pass/Fail with Relative Standing)"]
     
-    G -->|"If Eligible"| H["Direct Calendar Sync\n(Google Calendar API v3 / 12h & 3h Alerts)"]
+    G -->|"If Eligible"| H["Calendar Integration Engine\n(Google Calendar Web Intent + Dual-Alarm .ics)"]
     
     D --> J["React 18 + Tailwind Interface\n(Vite Dev Server :5173)"]
     G --> J
@@ -88,7 +110,7 @@ In accordance with Hacktoberfest Guidebook rules regarding third-party software 
 - **FastAPI**: Asynchronous Python web framework for microservices and REST endpoints.
 - **Uvicorn**: High-performance ASGI web server.
 - **SQLite (Python built-in `sqlite3`)**: Relational database with automatic schema migrations for student profiles, notices, and task states.
-- **HTTPX**: Asynchronous HTTP client for Gemini API and Google Calendar API communication.
+- **HTTPX**: Asynchronous HTTP client for Gemini API communication.
 
 ### Authentication & Cloud Services
 - **Firebase Authentication**: Genuine Google Sign-In with client credential resolution and live session persistence.
@@ -107,8 +129,10 @@ In accordance with Hacktoberfest Guidebook rules regarding third-party software 
 |---|---|---|
 | `POST` | `/api/notices` | Ingest PDF circular, image, or raw text; triggers Gemini extraction |
 | `GET` | `/api/notices/{id}` | Retrieve stored notice facts, tasks, and evidence metadata |
+| `GET` | `/api/notices` | List all processed notices and circulars |
 | `GET` | `/api/notices/{id}/eligibility` | Deterministically evaluate student eligibility with course-aware year logic |
 | `POST` | `/api/notices/{id}/ask` | Ask grounded contextual questions about the circular |
+| `GET` | `/api/notices/{id}/calendar.ics` | Download RFC 5545 calendar file with dual 12h & 3h prior alarms |
 | `POST` | `/api/notices/{id}/sync-google-calendar` | Directly schedule 12h & 3h prior reminder notifications in Google Calendar |
 | `GET` | `/api/course/duration` | Lookup program duration, pre-final year, and final year |
 | `POST` | `/api/course/analyze` | AI-assisted course duration and milestone evaluation for custom degrees |
@@ -206,9 +230,9 @@ cd DocuPilot
 
 | Member Name | Role | Email | GitHub | Key Responsibilities |
 |---|---|---|---|---|
-| **Yashwardhan Singh** | Team Lead & Backend Architecture | yashrock.ys61@gmail.com | [@Yashwardhan61](https://github.com/Yashwardhan61) | System architecture, SQLite database persistence layer & auto-migrations, dynamic course duration service, direct Google Calendar background synchronization, FastAPI routers, repository branch workflows. |
+| **Yashwardhan Singh** | Team Lead & Backend Architecture | yashrock.ys61@gmail.com | [@Yashwardhan61](https://github.com/Yashwardhan61) | System architecture, SQLite database persistence layer & auto-migrations, dynamic course duration service, dual-alarm calendar intent & RFC 5545 .ics generation, FastAPI routers, repository workflows. |
 | **Aditi Gupta** | AI Intelligence & Eligibility Logic | aditigupta.21apr@gmail.com | [@AditiGupta21](https://github.com/AditiGupta21) | Pydantic schema architecture, dual PDF/text extraction pipeline (`pypdf`), deterministic student eligibility engine with course-aware relative standing resolution, Gemini REST API client with model fallback & grounded Q&A. |
-| **Grishma Doshi** | Frontend & User Experience | grishmadoshi2@gmail.com | [@grishmadoshi](https://github.com/grishmadoshi) | React 18 + Tailwind CSS light theme user interface, NoticeUpload component, Firebase Authentication with Google Sign-In, dynamic academic Profile Setup modal with automatic year clamping, and student dashboard integration. |
+| **Grishma Doshi** | Frontend & User Experience | grishmadoshi2@gmail.com | [@grishmadoshi](https://github.com/grishmadoshi) | React 18 + Tailwind CSS light theme user interface, NoticeUpload component, Firebase Authentication with Google Sign-In, dynamic academic Profile Setup modal with automatic year clamping, missed deadline badge, and student dashboard integration. |
 
 ---
 

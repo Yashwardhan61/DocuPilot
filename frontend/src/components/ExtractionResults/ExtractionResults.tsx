@@ -110,18 +110,25 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
       if (!isEligible || activeUpcoming.length === 0 || autoSyncedRef.current) return;
 
       autoSyncedRef.current = true;
+      const token = localStorage.getItem('google_calendar_access_token');
+      if (!token) {
+        // Without active Google Calendar token, do not simulate sync; leave button ready for 1-click authorization
+        return;
+      }
+
       setIsSyncing(true);
-      const token = localStorage.getItem('google_calendar_access_token') || undefined;
       api.syncGoogleCalendar(result.notice_id, user?.email, token)
         .then((syncRes) => {
-          setIsRemindersSet(true);
-          setSyncFeedback(
-            syncRes.message || 'Reminders directly entered into your calendar (12h & 3h alerts active).'
-          );
+          if (syncRes.success && syncRes.synced_events_count > 0) {
+            setIsRemindersSet(true);
+            setSyncFeedback(
+              syncRes.message || 'Reminders directly scheduled in your Google Calendar (12h & 3h alerts active).'
+            );
+          }
         })
         .catch(() => {
-          setIsRemindersSet(true);
-          setSyncFeedback('Reminders registered: 12h & 3h alerts active for upcoming notice deadlines.');
+          // Token expired or lacks permission; require interactive click
+          localStorage.removeItem('google_calendar_access_token');
         })
         .finally(() => {
           setIsSyncing(false);
@@ -249,22 +256,38 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setSyncFeedback(null);
     try {
       let token = localStorage.getItem('google_calendar_access_token');
-      if (!token && user?.provider === 'google') {
-        try {
-          const popupRes = await signInWithPopup(auth, googleProvider);
-          const credential = GoogleAuthProvider.credentialFromResult(popupRes);
-          token = credential?.accessToken || null;
-          if (token) {
-            localStorage.setItem('google_calendar_access_token', token);
-          }
-        } catch (authErr) {
-          console.warn('Google Calendar authorization popup closed:', authErr);
+      // Prompt Google Calendar OAuth popup if token is missing
+      if (!token) {
+        const popupRes = await signInWithPopup(auth, googleProvider);
+        const credential = GoogleAuthProvider.credentialFromResult(popupRes);
+        token = credential?.accessToken || null;
+        if (token) {
+          localStorage.setItem('google_calendar_access_token', token);
         }
       }
 
-      const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token || undefined);
-      setIsRemindersSet(true);
-      setSyncFeedback(response.message || 'Reminders directly entered into your calendar (12h & 3h alerts active).');
+      if (token) {
+        const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
+        if (response.success && response.synced_events_count > 0) {
+          setIsRemindersSet(true);
+          setSyncFeedback(response.message || `Scheduled ${response.synced_events_count} reminder(s) directly in your Google Calendar (12h & 3h alerts active).`);
+          return;
+        }
+      }
+
+      // If token wasn't acquired or sync returned 0 events, open direct Google Calendar intent
+      const firstUpcoming = activeUpcoming[0];
+      if (firstUpcoming && firstUpcoming.date) {
+        const directUrl = api.generateDirectGoogleCalendarUrl({
+          noticeTitle: result.title,
+          label: firstUpcoming.label,
+          date: firstUpcoming.date,
+          email: user?.email,
+          snippet: firstUpcoming.evidence?.snippet,
+        });
+        window.open(directUrl, '_blank');
+        setSyncFeedback('Opened Google Calendar to save deadline reminder with 12h & 3h alerts pre-filled.');
+      }
     } catch {
       // Direct Calendar fallback: open first upcoming milestone directly in Google Calendar
       const firstUpcoming = activeUpcoming[0];
@@ -277,10 +300,9 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           snippet: firstUpcoming.evidence?.snippet,
         });
         window.open(directUrl, '_blank');
-        setIsRemindersSet(true);
-        setSyncFeedback('Direct Google Calendar reminder link opened with 12h & 3h alarms pre-filled.');
+        setSyncFeedback('Opened Google Calendar in a new tab with notice deadlines and 12h/3h alerts pre-filled.');
       } else {
-        setSyncFeedback('Calendar reminder scheduling encountered an error.');
+        setSyncFeedback('Unable to connect to Google Calendar.');
       }
     } finally {
       setIsSyncing(false);
@@ -293,7 +315,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setSyncFeedback(null);
     try {
       let token = localStorage.getItem('google_calendar_access_token');
-      if (!token && user?.provider === 'google') {
+      if (!token) {
         try {
           const popupRes = await signInWithPopup(auth, googleProvider);
           const credential = GoogleAuthProvider.credentialFromResult(popupRes);
@@ -302,25 +324,28 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             localStorage.setItem('google_calendar_access_token', token);
           }
         } catch {
-          // continue to fallback
+          // ignore popup cancellation
         }
       }
 
       if (token) {
-        await api.syncGoogleCalendar(result.notice_id, user?.email, token);
-        setIsRemindersSet(true);
-        setSyncFeedback(`Reminder scheduled directly in Google Calendar for ${item.label}.`);
-      } else {
-        const directUrl = api.generateDirectGoogleCalendarUrl({
-          noticeTitle: result.title,
-          label: item.label,
-          date: item.date,
-          email: user?.email,
-          snippet: item.evidence?.snippet,
-        });
-        window.open(directUrl, '_blank');
-        setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
+        const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
+        if (response.success && response.synced_events_count > 0) {
+          setIsRemindersSet(true);
+          setSyncFeedback(`Successfully scheduled ${item.label} directly in your Google Calendar.`);
+          return;
+        }
       }
+
+      const directUrl = api.generateDirectGoogleCalendarUrl({
+        noticeTitle: result.title,
+        label: item.label,
+        date: item.date,
+        email: user?.email,
+        snippet: item.evidence?.snippet,
+      });
+      window.open(directUrl, '_blank');
+      setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
     } catch {
       const directUrl = api.generateDirectGoogleCalendarUrl({
         noticeTitle: result.title,
@@ -590,21 +615,40 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
 
               {/* Direct Calendar Automated Confirmation Banner */}
               {eligibility.eligible && (
-                <div className={`p-3 rounded-xl flex items-center gap-2.5 text-xs font-medium border ${
+                <div className={`p-3 rounded-xl flex items-center justify-between gap-3 text-xs font-medium border ${
                   allDeadlinesPassed 
                     ? 'bg-amber-50 border-amber-200 text-amber-900' 
-                    : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
+                    : isRemindersSet
+                      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
+                      : 'bg-indigo-50/90 border-indigo-200 text-indigo-900'
                 }`}>
-                  {allDeadlinesPassed ? (
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="flex items-center gap-2.5">
+                    {allDeadlinesPassed ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    ) : isRemindersSet ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <CalendarCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                    )}
+                    <span>
+                      {allDeadlinesPassed 
+                        ? 'Notice criteria met, but all deadlines in this circular have already passed (You missed it).'
+                        : isRemindersSet
+                          ? 'Calendar Sync Active: Reminders with 12h & 3h prior alarms have been scheduled directly in your Google Calendar.'
+                          : 'You are eligible! Click "Set Reminders" to connect your Google Calendar and insert 12h & 3h alerts directly.'}
+                    </span>
+                  </div>
+
+                  {!allDeadlinesPassed && !isRemindersSet && (
+                    <button
+                      type="button"
+                      onClick={handleSyncCalendar}
+                      disabled={isSyncing}
+                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+                    >
+                      {isSyncing ? 'Connecting...' : 'Set Reminders Now'}
+                    </button>
                   )}
-                  <span>
-                    {allDeadlinesPassed 
-                      ? 'Notice criteria met, but all deadlines in this circular have already passed (You missed it).'
-                      : 'Direct Calendar Sync Active: Because your profile is eligible, upcoming deadline reminders (12h & 3h alerts) have been registered directly in your calendar.'}
-                  </span>
                 </div>
               )}
 

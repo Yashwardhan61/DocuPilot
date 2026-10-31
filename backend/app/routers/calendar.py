@@ -75,51 +75,50 @@ async def sync_notice_to_google_calendar(
             message="Notice deadline(s) have already passed. You missed it."
         )
 
-    if active_token:
-        # Mock token handling for testing
-        if active_token.startswith("ya29.mock"):
-            return GoogleCalendarSyncResponse(
-                success=True,
-                synced_events_count=max(1, len(upcoming_deadlines)),
-                events=[],
-                message="Successfully scheduled automated reminders directly in your personal Google Calendar."
-            )
-
-        try:
-            events = await CalendarService.sync_to_google_calendar(
-                access_token=active_token,
+    if not active_token:
+        # Build direct 1-click links for each milestone
+        events_with_urls = []
+        for d in upcoming_deadlines:
+            direct_url = CalendarService.generate_google_calendar_url(
                 notice_title=title,
-                deadlines=upcoming_deadlines,
+                deadline_item=d,
                 student_email=email
             )
-            return GoogleCalendarSyncResponse(
-                success=True,
-                synced_events_count=len(events),
-                events=events,
-                message=f"Successfully scheduled {len(events)} automated reminders with 12h & 3h prior alarms directly in your personal Google Calendar."
-            )
-        except Exception as exc:
-            if access_token or bearer_token:
-                raise HTTPException(status_code=400, detail=str(exc))
+            events_with_urls.append({
+                "event_id": f"evt_{str(d['date']).replace('-', '')}",
+                "summary": f"[DocuPilot] {d.get('label', 'Deadline')}",
+                "htmlLink": direct_url,
+                "direct_calendar_url": direct_url
+            })
 
-    # Direct automated reminder registration response for upcoming milestones
-    simulated_events = []
-    for d in upcoming_deadlines:
-        direct_url = CalendarService.generate_google_calendar_url(
+        return GoogleCalendarSyncResponse(
+            success=False,
+            synced_events_count=0,
+            events=events_with_urls,
+            message="Google Calendar authorization required to automatically insert events. Please click 'Set Reminders' to connect your Google account."
+        )
+
+    # Mock token handling for testing
+    if active_token.startswith("ya29.mock"):
+        return GoogleCalendarSyncResponse(
+            success=True,
+            synced_events_count=max(1, len(upcoming_deadlines)),
+            events=[],
+            message="Successfully scheduled automated reminders directly in your personal Google Calendar."
+        )
+
+    try:
+        events = await CalendarService.sync_to_google_calendar(
+            access_token=active_token,
             notice_title=title,
-            deadline_item=d,
+            deadlines=upcoming_deadlines,
             student_email=email
         )
-        simulated_events.append({
-            "event_id": f"evt_{str(d['date']).replace('-', '')}",
-            "summary": f"[DocuPilot] {d.get('label', 'Deadline')}",
-            "htmlLink": direct_url,
-            "direct_calendar_url": direct_url
-        })
-
-    return GoogleCalendarSyncResponse(
-        success=True,
-        synced_events_count=len(simulated_events),
-        events=simulated_events,
-        message=f"Automated reminders scheduled: 12h & 3h prior alerts active for {len(simulated_events)} upcoming deadline(s)."
-    )
+        return GoogleCalendarSyncResponse(
+            success=True,
+            synced_events_count=len(events),
+            events=events,
+            message=f"Successfully scheduled {len(events)} automated reminder(s) with 12h & 3h prior alarms directly in your personal Google Calendar."
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

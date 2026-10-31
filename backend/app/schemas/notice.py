@@ -12,7 +12,7 @@ class Deadline(BaseModel):
     label: str
     date: Optional[Union[str, DateType]] = None
     needs_confirmation: bool = False
-    evidence: Evidence
+    evidence: Optional[Evidence] = None
 
 # Eligibility requirements
 class Eligibility(BaseModel):

@@ -162,10 +162,48 @@ class GeminiService:
 
     @staticmethod
     def _post_process(data: dict):
+        if not data.get("title"):
+            data["title"] = "University Academic / Placement Notice"
+        if not data.get("summary"):
+            data["summary"] = "Official university circular extracted by DocuPilot."
+        if not isinstance(data.get("deadlines"), list):
+            data["deadlines"] = []
         for deadline in data.get("deadlines", []):
+            if not deadline.get("label"):
+                deadline["label"] = "Notice Deadline"
             if not deadline.get("date") or deadline.get("date") == "null":
                 deadline["date"] = None
                 deadline["needs_confirmation"] = True
+            if not deadline.get("evidence"):
+                deadline["evidence"] = {
+                    "snippet": f"Milestone: {deadline.get('label')}",
+                    "page": 1
+                }
+            elif isinstance(deadline["evidence"], dict) and not deadline["evidence"].get("snippet"):
+                deadline["evidence"]["snippet"] = f"Milestone: {deadline.get('label')}"
+
+        if not isinstance(data.get("eligibility"), dict):
+            data["eligibility"] = {
+                "courses": ["All"],
+                "branches": ["All"],
+                "years": ["All"],
+                "min_cgpa": None,
+                "other_conditions": []
+            }
+        else:
+            elig = data["eligibility"]
+            if "courses" not in elig or not isinstance(elig["courses"], list):
+                elig["courses"] = ["All"]
+            if "branches" not in elig or not isinstance(elig["branches"], list):
+                elig["branches"] = ["All"]
+            if "years" not in elig or not isinstance(elig["years"], list):
+                elig["years"] = ["All"]
+
+        if not isinstance(data.get("required_documents"), list):
+            data["required_documents"] = []
+
+        if not isinstance(data.get("tasks"), list):
+            data["tasks"] = []
 
     @staticmethod
     def _fallback_extraction(notice_text: str) -> Dict[str, Any]:

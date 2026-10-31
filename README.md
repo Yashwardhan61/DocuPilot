@@ -17,11 +17,8 @@
 
 ## Video Demonstration
 
-Click the video player below to watch the complete 2 to 3 minute walkthrough of DocuPilot in action:
-
-[![DocuPilot Video Demo Player](docs/screenshots/video_player_preview.png)](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
-
-*Click the banner above to launch the interactive video player directly on Google Drive.*
+Watch the complete 2 to 3 minute demonstration of DocuPilot in action:
+- **Google Drive Video Player**: [Click to Watch Full Walkthrough Video](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
 
 ---
 
@@ -54,22 +51,6 @@ DocuPilot transforms passive circular reading into proactive execution:
    - **RFC 5545 Dual-Alarm .ics Download**: Simultaneously downloads a single-event calendar file configured with both 12-hour (`-PT12H`) and 3-hour (`-PT3H`) prior reminder alarms, compatible with Google Calendar, Apple Calendar, and Outlook.
 9. **Grounded Notice Q&A**: Allows students to ask contextual questions about any circular, answered strictly from document contents.
 10. **Student Action Dashboard**: A clean, light-themed React/Tailwind web interface with an adaptive profile switcher, dynamic year clamping, and task checklist.
-
----
-
-## Application Screenshots
-
-### 1. Notice Ingestion & Multimodal Upload
-![DocuPilot Notice Upload](docs/screenshots/docupilot_upload.png)
-*DocuPilot Upload Interface: Drag-and-drop support for official circular PDFs, scanned images, and plain text announcements.*
-
-### 2. Extraction Dashboard, Eligibility Evaluation & Missed Deadline Detection
-![DocuPilot Extraction Dashboard](docs/screenshots/docupilot_extraction.png)
-*DocuPilot Dashboard: Extracted registration notice, deterministic eligibility check against student profile, and automatic expired deadline detection.*
-
-### 3. Dual-Alarm Calendar Synchronization & RFC 5545 .ics Integration
-![DocuPilot Calendar Sync and ICS](docs/screenshots/calendar_sync_and_ics.png)
-*Calendar Integration: Simultaneous Google Calendar Web Intent launch and RFC 5545 single-event .ics file with both 12-hour and 3-hour prior reminder alarms.*
 
 ---
 

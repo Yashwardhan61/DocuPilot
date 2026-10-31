@@ -7,6 +7,7 @@ const DEMO_STUDENT: UserProfile = {
   id: 'mnnit-student-2026',
   name: 'Yashwardhan Singh',
   email: 'yash.2024@mnnit.ac.in',
+  phone: '9876543210',
   branch: 'Computer Science & Engineering',
   year: '3rd Year B.Tech',
   provider: 'google',
@@ -55,8 +56,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       name: formattedName || 'MNNIT Student',
       email: creds.email,
       provider: 'email',
-      branch: 'Computer Science',
-      year: '3rd Year',
+      branch: 'Computer Science & Engineering',
+      year: '3rd Year B.Tech',
     };
 
     saveUserSession(loggedInUser);
@@ -69,9 +70,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: `usr-${Date.now()}`,
       name: creds.name,
       email: creds.email,
+      phone: creds.phone,
       provider: 'email',
-      branch: creds.branch || 'Engineering',
-      year: creds.year || '3rd Year',
+      branch: creds.branch || 'Computer Science & Engineering',
+      year: creds.year || '3rd Year B.Tech',
     };
 
     saveUserSession(newUser);
@@ -115,4 +117,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

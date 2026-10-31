@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Phone, Mail, Lock, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-// Inline Google SVG since lucide-react may not include it
+// Inline Google SVG icon
 const GoogleIcon = () => (
-  <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+  <svg className="mr-2.5 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
     <path
       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
       fill="#4285F4"
@@ -27,33 +27,60 @@ const GoogleIcon = () => (
 export const AuthModal: React.FC = () => {
   const { loginWithEmail, signupWithEmail, loginWithGoogle, loginAsDemoStudent } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  
+  // Form fields
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isValidEmail = (e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
-  const isValidPassword = (p: string) => p.length >= 8;
+  // Validation rules
+  const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+  const isValidPassword = (val: string) => val.length >= 8;
+  const isValidPhone = (val: string) => {
+    // Accepts 10 digits or standard international format (+91XXXXXXXXXX)
+    const cleaned = val.replace(/[\s-]/g, '');
+    return /^\+?[0-9]{10,13}$/.test(cleaned);
+  };
 
   const canSubmitLogin = isValidEmail(email) && isValidPassword(password);
   const canSubmitSignup =
-    fullName.trim().length > 0 &&
+    fullName.trim().length >= 2 &&
     isValidEmail(email) &&
+    isValidPhone(phone) &&
     isValidPassword(password) &&
     password === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (mode === 'signup' && !isValidPhone(phone)) {
+      setError('Please provide a valid 10-digit phone number');
+      return;
+    }
+
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === 'login') {
         await loginWithEmail({ email, password });
       } else {
-        await signupWithEmail({ name: fullName, email, password, confirmPassword });
+        await signupWithEmail({
+          name: fullName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          password,
+          confirmPassword,
+        });
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
@@ -63,26 +90,28 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 space-y-6">
-        {/* Logo & Title */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 text-white mb-3">
-            <Mail className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 space-y-6 my-auto border border-slate-200">
+        {/* Header */}
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 text-white shadow-xs mb-1">
+            <ShieldCheck className="w-5 h-5 text-indigo-400" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">DocuPilot</h1>
-          <p className="text-sm text-slate-500 mt-1">Notice-to-Action Agent for Students</p>
+          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">DocuPilot</h1>
+          <p className="text-xs text-slate-500">Notice-to-Action Agent for MNNIT Students</p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+        {/* Tab Toggle */}
+        <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
           <button
             type="button"
             role="tab"
             aria-selected={mode === 'login'}
             onClick={() => { setMode('login'); setError(null); }}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-              mode === 'login' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              mode === 'login' 
+                ? 'bg-white text-slate-900 shadow-xs' 
+                : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             Sign In
@@ -92,136 +121,178 @@ export const AuthModal: React.FC = () => {
             role="tab"
             aria-selected={mode === 'signup'}
             onClick={() => { setMode('signup'); setError(null); }}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
-              mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              mode === 'signup' 
+                ? 'bg-white text-slate-900 shadow-xs' 
+                : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            Sign Up
+            Create Account
           </button>
         </div>
 
-        {/* Google OAuth Button */}
-        <button
-          type="button"
-          onClick={loginWithGoogle}
-          className="flex items-center justify-center w-full py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-sm font-medium text-slate-700 transition-colors"
-        >
-          <GoogleIcon />
-          Continue with Google
-        </button>
-
-        {/* Demo Student (login mode only) */}
-        {mode === 'login' && (
+        {/* Direct Google Login */}
+        <div className="space-y-2">
           <button
             type="button"
-            onClick={loginAsDemoStudent}
-            className="w-full py-2 border border-dashed border-indigo-300 rounded-lg text-sm text-indigo-600 hover:bg-indigo-50 transition-colors"
+            onClick={loginWithGoogle}
+            className="flex items-center justify-center w-full py-2.5 px-4 border border-slate-300 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors shadow-xs"
           >
-            🎓 Demo Student (Quick Access)
+            <GoogleIcon />
+            <span>Continue with Google</span>
           </button>
-        )}
+
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={loginAsDemoStudent}
+              className="w-full py-2 px-3 border border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold transition-colors text-center"
+            >
+              Demo Student Quick Access
+            </button>
+          )}
+        </div>
 
         {/* Divider */}
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-slate-200" />
           </div>
-          <div className="relative flex justify-center text-xs text-slate-400 bg-white px-2">
-            or continue with email
+          <div className="relative flex justify-center text-[11px] font-medium text-slate-400 bg-white px-3">
+            or continue with credentials
           </div>
         </div>
 
-        {/* Email Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Email & Password Form */}
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           {mode === 'signup' && (
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="fullName" className="block text-xs font-semibold text-slate-700 mb-1">
                 Full Name
               </label>
-              <input
-                id="fullName"
-                type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                required
-                placeholder="Your full name"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <UserIcon className="h-4 w-4" />
+                </div>
+                <input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  placeholder="e.g. Yashwardhan Singh"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1">
               Email Address
             </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              placeholder="you@college.edu"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-              Password
-            </label>
             <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Mail className="h-4 w-4" />
+              </div>
               <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="Min. 8 characters"
-                className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="student@mnnit.ac.in"
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(s => !s)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-700"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
             </div>
+            {email && !isValidEmail(email) && (
+              <p className="text-[11px] text-amber-600 mt-1">Please enter a valid email address.</p>
+            )}
           </div>
 
           {mode === 'signup' && (
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="phone" className="block text-xs font-semibold text-slate-700 mb-1">
+                Phone Number
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Phone className="h-4 w-4" />
+                </div>
+                <input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  placeholder="10-digit mobile number"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              {phone && !isValidPhone(phone) && (
+                <p className="text-[11px] text-rose-600 mt-1">Please enter a valid 10-digit mobile number.</p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1">
+              Password
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Lock className="h-4 w-4" />
+              </div>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="At least 8 characters"
+                className="w-full pl-9 pr-10 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {password && !isValidPassword(password) && (
+              <p className="text-[11px] text-amber-600 mt-1">Password must be at least 8 characters.</p>
+            )}
+          </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label htmlFor="confirmPassword" className="block text-xs font-semibold text-slate-700 mb-1">
                 Confirm Password
               </label>
               <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="h-4 w-4" />
+                </div>
                 <input
                   id="confirmPassword"
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  placeholder="Repeat your password"
-                  className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Re-enter your password"
+                  className="w-full pl-9 pr-10 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(s => !s)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-700"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
               {confirmPassword && password !== confirmPassword && (
-                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                <p className="text-[11px] text-rose-600 mt-1">Passwords do not match.</p>
               )}
             </div>
           )}
 
           {error && (
-            <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
               {error}
             </p>
           )}
@@ -229,26 +300,41 @@ export const AuthModal: React.FC = () => {
           <button
             type="submit"
             disabled={loading || (mode === 'login' ? !canSubmitLogin : !canSubmitSignup)}
-            className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs flex items-center justify-center gap-2"
           >
             {loading && (
-              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
             )}
-            {mode === 'login' ? 'Sign In' : 'Create Account'}
+            <span>{mode === 'login' ? 'Sign In' : 'Complete Registration'}</span>
           </button>
         </form>
 
-        <p className="text-center text-sm text-slate-500">
+        {/* Footer switch */}
+        <p className="text-center text-xs text-slate-500">
           {mode === 'login' ? (
-            <>Don&apos;t have an account?{' '}
-              <button type="button" onClick={() => setMode('signup')} className="text-indigo-600 hover:underline font-medium">Sign Up</button>
+            <>
+              First time on DocuPilot?{' '}
+              <button 
+                type="button" 
+                onClick={() => { setMode('signup'); setError(null); }} 
+                className="text-indigo-600 hover:underline font-bold"
+              >
+                Create Account
+              </button>
             </>
           ) : (
-            <>Already have an account?{' '}
-              <button type="button" onClick={() => setMode('login')} className="text-indigo-600 hover:underline font-medium">Sign In</button>
+            <>
+              Already registered?{' '}
+              <button 
+                type="button" 
+                onClick={() => { setMode('login'); setError(null); }} 
+                className="text-indigo-600 hover:underline font-bold"
+              >
+                Sign In
+              </button>
             </>
           )}
         </p>

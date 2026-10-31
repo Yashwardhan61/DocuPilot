@@ -2,6 +2,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   avatarUrl?: string;
   branch?: string;
   year?: string;
@@ -17,6 +18,7 @@ export interface LoginCredentials {
 export interface SignupCredentials {
   name: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
   branch?: string;
@@ -33,4 +35,3 @@ export interface AuthContextType {
   loginAsDemoStudent: () => void;
   logout: () => void;
 }
-

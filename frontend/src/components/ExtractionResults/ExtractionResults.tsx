@@ -16,7 +16,9 @@ import {
   MessageSquare,
   Loader2,
   Check,
-  UserCheck
+  UserCheck,
+  Bell,
+  ExternalLink
 } from 'lucide-react';
 import { 
   NoticeExtractionResult, 
@@ -25,6 +27,7 @@ import {
   EligibilityEvaluation 
 } from '../../types/notice';
 import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 interface ExtractionResultsProps {
   result: NoticeExtractionResult;
@@ -49,6 +52,8 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
   onReset,
   onOpenEvidence,
 }) => {
+  const { user } = useAuth();
+
   // Calendar sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
@@ -108,8 +113,21 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      const response = await api.syncGoogleCalendar(result.notice_id);
-      setSyncFeedback(response.message || 'Events synchronized to your Google Calendar');
+      const response = await api.syncGoogleCalendar(result.notice_id, user?.email);
+      setSyncFeedback(response.message || '12h & 3h prior reminder alerts scheduled for your personal Google Calendar');
+      
+      // If there is an actionable deadline, open the 1-click personal Google Calendar intent in a new tab
+      const firstDatedDeadline = result.deadlines.find((d) => d.date);
+      if (firstDatedDeadline && firstDatedDeadline.date) {
+        const directUrl = api.generateDirectGoogleCalendarUrl({
+          noticeTitle: result.title,
+          label: firstDatedDeadline.label,
+          date: firstDatedDeadline.date,
+          email: user?.email,
+          snippet: firstDatedDeadline.evidence?.snippet,
+        });
+        window.open(directUrl, '_blank', 'noopener,noreferrer');
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Calendar sync failed. You can still download the .ics file below.';
       setSyncFeedback(msg);
@@ -137,7 +155,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     }
   };
 
-  const downloadIcsUrl = api.getIcsDownloadUrl(result.notice_id);
+  const downloadIcsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-8">
@@ -161,16 +179,18 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             <a
               href={downloadIcsUrl}
               download={`notice_${result.notice_id}_deadlines.ics`}
+              title="Download calendar file with 12h & 3h alarms for Apple, Google, or Outlook"
               className="px-3.5 py-2 border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs"
             >
               <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Download .ics</span>
+              <span>Download .ics (12h & 3h)</span>
             </a>
 
             <button
               type="button"
               onClick={handleSyncCalendar}
               disabled={isSyncing}
+              title={`Schedule 12h & 3h reminders on ${user?.email || 'your personal Google Calendar'}`}
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-60"
             >
               {isSyncing ? (
@@ -178,7 +198,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
               ) : (
                 <CalendarCheck className="w-3.5 h-3.5" />
               )}
-              <span>{isSyncing ? 'Syncing...' : 'Sync to Calendar'}</span>
+              <span>{isSyncing ? 'Setting Reminders...' : 'Set Reminders (12h & 3h)'}</span>
             </button>
 
             <button
@@ -396,6 +416,29 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                         </span>
                       )}
                     </div>
+
+                    {item.date && (
+                      <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500 font-medium">12h & 3h prior alerts</span>
+                        <a
+                          href={api.generateDirectGoogleCalendarUrl({
+                            noticeTitle: result.title,
+                            label: item.label,
+                            date: item.date,
+                            email: user?.email,
+                            snippet: item.evidence?.snippet,
+                          })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors"
+                          title="Schedule 12h & 3h prior reminder on your personal Google Calendar"
+                        >
+                          <Bell className="w-3 h-3 text-indigo-600" />
+                          <span>Set Reminder</span>
+                          <ExternalLink className="w-2.5 h-2.5 text-indigo-400" />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

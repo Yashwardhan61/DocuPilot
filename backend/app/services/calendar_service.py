@@ -62,7 +62,7 @@ class CalendarService:
         student_email: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Builds the event payload for Google Calendar API v3 with 12-hour and 3-hour prior reminder overrides.
+        Builds a single event payload for Google Calendar API v3 with both 12-hour and 3-hour prior reminder overrides.
         """
         date_val = deadline_item.get("date")
         date_str = str(date_val)[:10] if date_val else datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -71,16 +71,27 @@ class CalendarService:
         evidence = deadline_item.get("evidence", {}).get("snippet", "")
         page = deadline_item.get("evidence", {}).get("page", 1)
 
+        # Timed event at 23:59:00 on the deadline day
+        start_iso = f"{date_str}T23:59:00+05:30"
+        end_iso = f"{date_str}T23:59:00+05:30"
+
         event_body: Dict[str, Any] = {
             "summary": f"[DocuPilot] {label} - {notice_title}",
             "description": (
                 f"Notice: {notice_title}\n"
-                f"Evidence: {evidence}\n"
-                f"Page: {page}\n\n"
-                "Automated notice reminder synchronized by DocuPilot."
+                f"Milestone: {label}\n"
+                f"Evidence: {evidence} (Page {page})\n\n"
+                "Automated reminder synchronized by DocuPilot.\n"
+                "Configured alarms: 12 hours prior and 3 hours prior."
             ),
-            "start": {"date": date_str},
-            "end": {"date": (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") if len(date_str) == 10 and "-" in date_str else date_str},
+            "start": {
+                "dateTime": start_iso,
+                "timeZone": "Asia/Kolkata"
+            },
+            "end": {
+                "dateTime": end_iso,
+                "timeZone": "Asia/Kolkata"
+            },
             "reminders": {
                 "useDefault": False,
                 "overrides": [
@@ -89,9 +100,6 @@ class CalendarService:
                 ]
             }
         }
-
-        if student_email and "@" in student_email:
-            event_body["attendees"] = [{"email": student_email}]
 
         return event_body
 

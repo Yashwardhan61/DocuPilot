@@ -16,7 +16,8 @@ import {
   Loader2,
   Check,
   UserCheck,
-  Bell
+  Bell,
+  Download
 } from 'lucide-react';
 import { 
   NoticeExtractionResult, 
@@ -27,7 +28,6 @@ import {
 } from '../../types/notice';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { auth, googleProvider, signInWithPopup, GoogleAuthProvider } from '../../services/firebase';
 import { COURSES, getYearsForCourse } from '../ProfileModal/ProfileSetupModal';
 
 interface ExtractionResultsProps {
@@ -255,55 +255,32 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      let token = localStorage.getItem('google_calendar_access_token');
-      // Prompt Google Calendar OAuth popup if token is missing
-      if (!token) {
-        const popupRes = await signInWithPopup(auth, googleProvider);
-        const credential = GoogleAuthProvider.credentialFromResult(popupRes);
-        token = credential?.accessToken || null;
-        if (token) {
-          localStorage.setItem('google_calendar_access_token', token);
-        }
-      }
-
+      const token = localStorage.getItem('google_calendar_access_token');
       if (token) {
         const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
         if (response.success && response.synced_events_count > 0) {
           setIsRemindersSet(true);
-          setSyncFeedback(response.message || `Scheduled ${response.synced_events_count} reminder(s) directly in your Google Calendar (12h & 3h alerts active).`);
+          setSyncFeedback(`Successfully scheduled ${response.synced_events_count} reminder(s) directly in your Google Calendar (12h & 3h alarms active).`);
           return;
         }
       }
 
-      // If token wasn't acquired or sync returned 0 events, open direct Google Calendar intent
-      const firstUpcoming = activeUpcoming[0];
-      if (firstUpcoming && firstUpcoming.date) {
-        const directUrl = api.generateDirectGoogleCalendarUrl({
-          noticeTitle: result.title,
-          label: firstUpcoming.label,
-          date: firstUpcoming.date,
-          email: user?.email,
-          snippet: firstUpcoming.evidence?.snippet,
-        });
-        window.open(directUrl, '_blank');
-        setSyncFeedback('Opened Google Calendar to save deadline reminder with 12h & 3h alerts pre-filled.');
-      }
+      // Direct 1-Click single event calendar sync with both 12h & 3h alarms
+      const icsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
+      const link = document.createElement('a');
+      link.href = icsUrl;
+      link.setAttribute('download', `notice_${result.notice_id}_deadlines.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setIsRemindersSet(true);
+      setSyncFeedback('Single event downloaded with both 12-hour and 3-hour alarms configured. Open to add directly to Calendar.');
     } catch {
-      // Direct Calendar fallback: open first upcoming milestone directly in Google Calendar
-      const firstUpcoming = activeUpcoming[0];
-      if (firstUpcoming && firstUpcoming.date) {
-        const directUrl = api.generateDirectGoogleCalendarUrl({
-          noticeTitle: result.title,
-          label: firstUpcoming.label,
-          date: firstUpcoming.date,
-          email: user?.email,
-          snippet: firstUpcoming.evidence?.snippet,
-        });
-        window.open(directUrl, '_blank');
-        setSyncFeedback('Opened Google Calendar in a new tab with notice deadlines and 12h/3h alerts pre-filled.');
-      } else {
-        setSyncFeedback('Unable to connect to Google Calendar.');
-      }
+      const icsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
+      window.location.href = icsUrl;
+      setIsRemindersSet(true);
+      setSyncFeedback('Single event downloaded with both 12-hour and 3-hour alarms configured.');
     } finally {
       setIsSyncing(false);
     }
@@ -314,48 +291,30 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      let token = localStorage.getItem('google_calendar_access_token');
-      if (!token) {
-        try {
-          const popupRes = await signInWithPopup(auth, googleProvider);
-          const credential = GoogleAuthProvider.credentialFromResult(popupRes);
-          token = credential?.accessToken || null;
-          if (token) {
-            localStorage.setItem('google_calendar_access_token', token);
-          }
-        } catch {
-          // ignore popup cancellation
-        }
-      }
-
+      const token = localStorage.getItem('google_calendar_access_token');
       if (token) {
         const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
         if (response.success && response.synced_events_count > 0) {
           setIsRemindersSet(true);
-          setSyncFeedback(`Successfully scheduled ${item.label} directly in your Google Calendar.`);
+          setSyncFeedback(`Successfully scheduled ${item.label} directly in your Google Calendar (12h & 3h alarms active).`);
           return;
         }
       }
 
-      const directUrl = api.generateDirectGoogleCalendarUrl({
-        noticeTitle: result.title,
-        label: item.label,
-        date: item.date,
-        email: user?.email,
-        snippet: item.evidence?.snippet,
-      });
-      window.open(directUrl, '_blank');
-      setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
+      // Direct 1-click single event download with both 12h & 3h alarms
+      const icsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
+      const link = document.createElement('a');
+      link.href = icsUrl;
+      link.setAttribute('download', `notice_${result.notice_id}_${item.date}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setIsRemindersSet(true);
+      setSyncFeedback(`Event for ${item.label} downloaded with both 12h & 3h alarms. Open to add to calendar.`);
     } catch {
-      const directUrl = api.generateDirectGoogleCalendarUrl({
-        noticeTitle: result.title,
-        label: item.label,
-        date: item.date,
-        email: user?.email,
-        snippet: item.evidence?.snippet,
-      });
-      window.open(directUrl, '_blank');
-      setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
+      const icsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
+      window.location.href = icsUrl;
     } finally {
       setIsSyncing(false);
     }
@@ -427,7 +386,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                 type="button"
                 onClick={handleSyncCalendar}
                 disabled={isSyncing}
-                title="Reminders have been set directly in your calendar (12h & 3h prior alerts active)"
+                title="Single event with both 12h & 3h prior alarms is active in your calendar"
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5 text-emerald-100" />
@@ -438,7 +397,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                 type="button"
                 onClick={handleSyncCalendar}
                 disabled={isSyncing}
-                title={`Schedule 12h & 3h reminders directly on ${user?.email || 'your personal Google Calendar'}`}
+                title={`Directly schedule single event with 12h & 3h alerts on ${user?.email || 'your personal Google Calendar'}`}
                 className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-60 cursor-pointer"
               >
                 {isSyncing ? (
@@ -448,6 +407,18 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                 )}
                 <span>{isSyncing ? 'Setting Reminders...' : 'Set Reminders (12h & 3h)'}</span>
               </button>
+            )}
+
+            {!allDeadlinesPassed && (
+              <a
+                href={api.getIcsDownloadUrl(result.notice_id, user?.email)}
+                download={`notice_${result.notice_id}_deadlines.ics`}
+                title="1-click single event containing both 12-hour and 3-hour prior alarms"
+                className="px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>1-Click .ics (12h & 3h)</span>
+              </a>
             )}
 
             <button
@@ -634,8 +605,8 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                       {allDeadlinesPassed 
                         ? 'Notice criteria met, but all deadlines in this circular have already passed (You missed it).'
                         : isRemindersSet
-                          ? 'Calendar Sync Active: Reminders with 12h & 3h prior alarms have been scheduled directly in your Google Calendar.'
-                          : 'You are eligible! Click "Set Reminders" to connect your Google Calendar and insert 12h & 3h alerts directly.'}
+                          ? 'Calendar Sync Active: Single event with both 12h & 3h prior alarms has been added to your calendar.'
+                          : 'You are eligible! Click "Set Reminders (12h & 3h)" to directly add the single event with both 12-hour and 3-hour alarms to your calendar.'}
                     </span>
                   </div>
 
@@ -764,16 +735,27 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                                   <span>Reminder Active (12h & 3h)</span>
                                 </span>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSyncSingleDeadline(item)}
-                                  disabled={isSyncing}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
-                                  title="Directly schedule 12h & 3h prior reminder on your Google Calendar"
-                                >
-                                  <Bell className="w-3 h-3 text-indigo-600" />
-                                  <span>Set Reminder</span>
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSyncSingleDeadline(item)}
+                                    disabled={isSyncing}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                                    title="Directly schedule single event with 12h & 3h prior alarms on your Google Calendar"
+                                  >
+                                    <Bell className="w-3 h-3 text-indigo-600" />
+                                    <span>Set Reminder</span>
+                                  </button>
+                                  <a
+                                    href={api.getIcsDownloadUrl(result.notice_id, user?.email)}
+                                    download={`notice_${result.notice_id}.ics`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-200 transition-colors cursor-pointer"
+                                    title="1-click single event containing both 12h & 3h alarms for Google/Apple Calendar"
+                                  >
+                                    <Download className="w-3 h-3 text-slate-500" />
+                                    <span>.ics</span>
+                                  </a>
+                                </div>
                               )}
                             </>
                           )}

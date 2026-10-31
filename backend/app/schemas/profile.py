@@ -1,7 +1,10 @@
+from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
 class StudentProfile(BaseModel):
+    course: Optional[str] = "B.Tech"
+    department: Optional[str] = None
     branch: str = Field(min_length=1, max_length=50)
     year: str = Field(min_length=1, max_length=30)
     cgpa: float = Field(ge=0, le=10)

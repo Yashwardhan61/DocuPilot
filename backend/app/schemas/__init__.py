@@ -26,6 +26,7 @@ StudentProfileSchema = StudentProfile
 
 class EligibilityResultSchema(BaseModel):
     eligible: bool
+    course_eligible: bool = True
     branch_eligible: bool
     year_eligible: bool
     cgpa_eligible: bool

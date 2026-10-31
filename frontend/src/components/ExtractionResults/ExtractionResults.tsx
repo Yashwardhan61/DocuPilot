@@ -28,6 +28,7 @@ import {
 } from '../../types/notice';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { COURSES, getYearsForCourse } from '../ProfileModal/ProfileSetupModal';
 
 interface ExtractionResultsProps {
   result: NoticeExtractionResult;
@@ -39,10 +40,6 @@ interface ExtractionResultsProps {
 
 const MNNIT_BRANCHES = [
   'CSE', 'IT', 'ECE', 'EE', 'ME', 'CE', 'CH', 'BT', 'MCA'
-];
-
-const MNNIT_YEARS = [
-  '1st', '2nd', '3rd', '4th'
 ];
 
 export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
@@ -83,6 +80,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
       .catch(() => {
         if (isCurrent) {
           // Client-side fallback guarantees immediate interactive feedback
+          const allowedCourses = result.eligibility?.courses || [];
           const allowedBranches = result.eligibility?.branches || [];
           const allowedYears = result.eligibility?.years || [];
           const minCgpa = result.eligibility?.min_cgpa ?? 0;
@@ -91,6 +89,13 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           const studentBranch = studentProfile.branch.toLowerCase();
           const studentDept = (studentProfile.department || '').toLowerCase();
 
+          // Course Match
+          const courseMatch = allowedCourses.length === 0 || allowedCourses.some((c) => {
+            const cLow = c.toLowerCase();
+            return cLow.includes('all') || cLow === studentCourse || studentCourse.includes(cLow);
+          });
+
+          // Branch Match
           const branchMatch = allowedBranches.length === 0 || allowedBranches.some((b) => {
             const bLow = b.toLowerCase();
             return (
@@ -102,26 +107,39 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             );
           });
 
+          // Course-aware Year Match
+          const validYearsForCourse = getYearsForCourse(studentProfile.course || 'B.Tech');
+          const finalYearId = validYearsForCourse.find((y) => y.isFinal)?.id || '4th';
+          const preFinalYearId = validYearsForCourse.find((y) => y.isPreFinal)?.id || '3rd';
+          const isStudentFinal = studentProfile.year === finalYearId;
+          const isStudentPreFinal = studentProfile.year === preFinalYearId;
+
           const yearMatch = allowedYears.length === 0 || allowedYears.some((y) => {
             const yLower = y.toLowerCase();
             if (yLower.includes('all')) return true;
-            if ((studentProfile.year.includes('3') || studentProfile.year.toLowerCase().includes('3rd')) && (yLower.includes('3') || yLower.includes('pre-final') || yLower.includes('pre final'))) return true;
-            if ((studentProfile.year.includes('4') || studentProfile.year.toLowerCase().includes('4th')) && (yLower.includes('4') || yLower.includes('final'))) return true;
+            if (yLower.includes('pre-final') || yLower.includes('pre final') || yLower.includes('penultimate')) {
+              if (isStudentPreFinal) return true;
+            }
+            if (yLower.includes('final') && !yLower.includes('pre')) {
+              if (isStudentFinal) return true;
+            }
             return yLower.includes(studentProfile.year.toLowerCase());
           });
 
           const cgpaMatch = studentProfile.cgpa >= minCgpa;
           const backlogMatch = !studentProfile.active_backlogs;
-          const eligible = branchMatch && yearMatch && cgpaMatch && backlogMatch;
+          const eligible = courseMatch && branchMatch && yearMatch && cgpaMatch && backlogMatch;
 
           const reasons: string[] = [];
-          if (!branchMatch) reasons.push(`Program ${studentProfile.course || 'B.Tech'} in ${studentProfile.branch} is not among the target disciplines.`);
-          if (!yearMatch) reasons.push(`Year ${studentProfile.year} does not meet circular year criteria.`);
+          if (!courseMatch) reasons.push(`Degree program ${studentProfile.course || 'B.Tech'} is not eligible for this notice.`);
+          if (!branchMatch) reasons.push(`Discipline ${studentProfile.branch} is not among the target disciplines.`);
+          if (!yearMatch) reasons.push(`Year ${studentProfile.year} (${studentProfile.course || 'B.Tech'}) does not meet circular criteria.`);
           if (!cgpaMatch) reasons.push(`CPI ${studentProfile.cgpa.toFixed(1)} is below the minimum required ${minCgpa}.`);
           if (!backlogMatch) reasons.push('Candidate has active backlogs; zero backlogs required.');
 
           setEligibility({
             eligible,
+            course_eligible: courseMatch,
             branch_eligible: branchMatch,
             year_eligible: yearMatch,
             cgpa_eligible: cgpaMatch,
@@ -315,12 +333,20 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             {/* Course Selector */}
             <select
               value={studentProfile.course || 'B.Tech'}
-              onChange={(e) => onUpdateProfile({ ...studentProfile, course: e.target.value })}
+              onChange={(e) => {
+                const newCourse = e.target.value;
+                const validYears = getYearsForCourse(newCourse);
+                let newYear = studentProfile.year;
+                if (!validYears.some((y) => y.id === newYear)) {
+                  newYear = validYears[validYears.length - 1].id;
+                }
+                onUpdateProfile({ ...studentProfile, course: newCourse, year: newYear });
+              }}
               className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               title="Select Degree Program / Course"
             >
-              {['B.Tech', 'M.Tech', 'MCA', 'MBA', 'M.Sc', 'Ph.D.'].map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {COURSES.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
 
@@ -341,9 +367,12 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
               value={studentProfile.year}
               onChange={(e) => onUpdateProfile({ ...studentProfile, year: e.target.value })}
               className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Select Year (Pre-Final / Final Year adapt to course)"
             >
-              {MNNIT_YEARS.map((y) => (
-                <option key={y} value={y}>{y} Year</option>
+              {getYearsForCourse(studentProfile.course || 'B.Tech').map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.label} {y.isFinal ? '(Final Year)' : y.isPreFinal ? '(Pre-Final)' : ''}
+                </option>
               ))}
             </select>
 
@@ -549,6 +578,25 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Courses / Degrees */}
+                {result.eligibility.courses && result.eligibility.courses.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                      Target Courses / Degrees
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {result.eligibility.courses.map((c, cIdx) => (
+                        <span
+                          key={`course-${cIdx}`}
+                          className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold rounded-md"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Branches */}
                 {result.eligibility.branches && result.eligibility.branches.length > 0 && (
                   <div>

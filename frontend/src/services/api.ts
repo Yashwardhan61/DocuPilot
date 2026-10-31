@@ -3,7 +3,8 @@ import {
   StudentProfile, 
   EligibilityEvaluation, 
   CalendarSyncResponse,
-  QuestionResponse 
+  QuestionResponse,
+  CourseMetadata
 } from '../types/notice';
 import { NoticeInput } from '../components/NoticeUpload/NoticeUpload';
 
@@ -68,6 +69,7 @@ export const api = {
     profile?: Partial<StudentProfile>
   ): Promise<EligibilityEvaluation> {
     const params = new URLSearchParams();
+    if (profile?.course) params.append('course', profile.course);
     if (profile?.branch) params.append('branch', profile.branch);
     if (profile?.year) params.append('year', profile.year);
     if (profile?.cgpa !== undefined) params.append('cgpa', profile.cgpa.toString());
@@ -82,6 +84,28 @@ export const api = {
       throw new ApiError('Failed to calculate eligibility', response.status);
     }
 
+    return response.json();
+  },
+
+  // Get duration and year structure for a course
+  async getCourseDuration(course: string): Promise<CourseMetadata> {
+    const response = await fetch(`${API_BASE}/course/duration?course=${encodeURIComponent(course)}`);
+    if (!response.ok) {
+      throw new ApiError('Failed to fetch course duration', response.status);
+    }
+    return response.json();
+  },
+
+  // Analyze a custom course with AI
+  async analyzeCourse(course: string): Promise<CourseMetadata> {
+    const response = await fetch(`${API_BASE}/course/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ course }),
+    });
+    if (!response.ok) {
+      throw new ApiError('Failed to analyze course with AI', response.status);
+    }
     return response.json();
   },
 

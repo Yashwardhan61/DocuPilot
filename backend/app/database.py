@@ -53,6 +53,8 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS student_profiles (
         id TEXT PRIMARY KEY,
+        course TEXT DEFAULT 'B.Tech',
+        department TEXT,
         branch TEXT,
         year TEXT,
         cgpa REAL,
@@ -61,11 +63,16 @@ def init_db():
     )
     """)
 
-    # Auto-migrate active_backlogs if table existed before
-    try:
-        cursor.execute("ALTER TABLE student_profiles ADD COLUMN active_backlogs INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    # Auto-migrate columns if table existed before
+    for col_def in [
+        ("course", "TEXT DEFAULT 'B.Tech'"),
+        ("department", "TEXT"),
+        ("active_backlogs", "INTEGER DEFAULT 0")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE student_profiles ADD COLUMN {col_def[0]} {col_def[1]}")
+        except sqlite3.OperationalError:
+            pass
 
     # Google OAuth tokens table
     cursor.execute("""
@@ -227,14 +234,31 @@ def get_notice(notice_id: str) -> Optional[Dict[str, Any]]:
         "created_at": row["created_at"]
     }
 
-def save_profile(profile_id: str, branch: str, year: str, cgpa: float, active_backlogs: bool = False):
+def save_profile(
+    profile_id: str,
+    branch: str,
+    year: str,
+    cgpa: float,
+    active_backlogs: bool = False,
+    course: str = "B.Tech",
+    department: Optional[str] = None
+):
     conn = get_connection()
     cursor = conn.cursor()
     now_iso = datetime.now(timezone.utc).isoformat()
     cursor.execute("""
-        INSERT OR REPLACE INTO student_profiles (id, branch, year, cgpa, active_backlogs, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (profile_id, branch.strip(), year.strip(), float(cgpa), 1 if active_backlogs else 0, now_iso))
+        INSERT OR REPLACE INTO student_profiles (id, course, department, branch, year, cgpa, active_backlogs, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        profile_id,
+        course.strip() if course else "B.Tech",
+        department.strip() if department else None,
+        branch.strip(),
+        year.strip(),
+        float(cgpa),
+        1 if active_backlogs else 0,
+        now_iso
+    ))
     conn.commit()
     conn.close()
 
@@ -246,12 +270,15 @@ def get_profile(profile_id: str = "default_user") -> Optional[Dict[str, Any]]:
     conn.close()
     if not row:
         return None
+    keys = row.keys()
     return {
         "id": row["id"],
+        "course": row["course"] if "course" in keys and row["course"] else "B.Tech",
+        "department": row["department"] if "department" in keys else None,
         "branch": row["branch"],
         "year": row["year"],
         "cgpa": row["cgpa"],
-        "active_backlogs": bool(row["active_backlogs"]) if "active_backlogs" in row.keys() else False,
+        "active_backlogs": bool(row["active_backlogs"]) if "active_backlogs" in keys else False,
         "updated_at": row["updated_at"]
     }
 

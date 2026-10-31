@@ -16,6 +16,7 @@ class Deadline(BaseModel):
 
 # Eligibility requirements
 class Eligibility(BaseModel):
+    courses: List[str] = Field(default_factory=list)
     branches: List[str] = Field(default_factory=list)
     years: List[str] = Field(default_factory=list)
     min_cgpa: Optional[float] = None

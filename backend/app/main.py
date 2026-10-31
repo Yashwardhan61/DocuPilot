@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
-from app.routers import notices, profile, eligibility, calendar, auth
+from app.routers import notices, profile, eligibility, calendar, auth, course
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,6 +33,7 @@ app.include_router(profile.router)
 app.include_router(eligibility.router)
 app.include_router(calendar.router)
 app.include_router(auth.router)
+app.include_router(course.router)
 
 @app.get("/")
 def home():

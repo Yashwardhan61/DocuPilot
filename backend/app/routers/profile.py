@@ -14,7 +14,9 @@ async def update_student_profile(profile: StudentProfileSchema):
         branch=profile.branch,
         year=profile.year,
         cgpa=profile.cgpa,
-        active_backlogs=profile.active_backlogs
+        active_backlogs=profile.active_backlogs,
+        course=profile.course or "B.Tech",
+        department=profile.department
     )
 
     return profile
@@ -33,6 +35,8 @@ async def retrieve_student_profile():
         )
 
     return StudentProfileSchema(
+        course=data.get("course", "B.Tech"),
+        department=data.get("department"),
         branch=data["branch"],
         year=data["year"],
         cgpa=data["cgpa"],

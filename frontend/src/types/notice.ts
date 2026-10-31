@@ -12,6 +12,7 @@ export interface DeadlineItem {
 }
 
 export interface EligibilityInfo {
+  courses?: string[];
   branches?: string[];
   years?: string[];
   min_cgpa?: number | null;
@@ -54,20 +55,42 @@ export interface StepStatus {
 }
 
 export interface StudentProfile {
+  course?: string;
+  department?: string;
   branch: string;
   year: string;
   cgpa: number;
   active_backlogs: boolean;
+  profile_completed?: boolean;
 }
 
 export interface EligibilityEvaluation {
   eligible: boolean;
+  course_eligible?: boolean;
   branch_eligible: boolean;
   year_eligible: boolean;
   cgpa_eligible: boolean;
   reasons: string[];
   manual_checks: string[];
   evidence_snippet?: string | null;
+}
+
+export interface CourseYearItem {
+  id: string;
+  year_number: number;
+  label: string;
+  is_pre_final: boolean;
+  is_final: boolean;
+}
+
+export interface CourseMetadata {
+  course: string;
+  name: string;
+  duration_years: number;
+  pre_final_year: string;
+  final_year: string;
+  years: CourseYearItem[];
+  description?: string;
 }
 
 export interface QuestionResponse {

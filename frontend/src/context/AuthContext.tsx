@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { UserProfile, LoginCredentials, SignupCredentials, AuthContextType } from '../types/auth';
+import { 
+  auth, 
+  googleProvider, 
+  signInWithPopup, 
+  firebaseSignOut, 
+  onAuthStateChanged, 
+  GoogleAuthProvider 
+} from '../services/firebase';
 
 const STORAGE_KEY = 'docupilot_auth_user';
 
@@ -11,7 +19,25 @@ const DEMO_STUDENT: UserProfile = {
   branch: 'Computer Science & Engineering',
   year: '3rd Year B.Tech',
   provider: 'google',
+  calendarConnected: true,
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+};
+
+const resolvePersonNameFromGoogle = (displayName: string | null | undefined, email: string | null | undefined): string => {
+  if (displayName && displayName.trim()) {
+    return displayName.trim();
+  }
+  if (email && email.includes('@')) {
+    const localPart = email.split('@')[0].replace(/[._0-9-]/g, ' ').trim();
+    if (localPart) {
+      return localPart
+        .split(' ')
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+  }
+  return 'Student';
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,8 +46,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Restore stored session on mount
+  // Restore stored session and observe Firebase Auth state
   useEffect(() => {
+    // First load from localStorage for instant offline access
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -29,9 +56,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch {
       console.warn('Failed to parse stored auth user');
-    } finally {
-      setIsLoading(false);
     }
+
+    // Subscribe to Firebase Authentication state changes
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        const studentName = resolvePersonNameFromGoogle(firebaseUser.displayName, firebaseUser.email);
+        const mappedUser: UserProfile = {
+          id: firebaseUser.uid,
+          name: studentName,
+          email: firebaseUser.email || 'student@mnnit.ac.in',
+          avatarUrl: firebaseUser.photoURL || undefined,
+          provider: 'google',
+          calendarConnected: true,
+          branch: 'Computer Science & Engineering',
+          year: '3rd Year B.Tech',
+        };
+        setUser(mappedUser);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mappedUser));
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const saveUserSession = (newUser: UserProfile | null) => {
@@ -43,52 +90,76 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const loginWithEmail = async (creds: LoginCredentials): Promise<void> => {
-    // Simulated authentication delay
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    
-    // In demo environment, generate student profile from email
-    const namePart = creds.email.split('@')[0].replace(/[._]/g, ' ');
-    const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+  const loginWithGoogle = async (customEmail?: string, customName?: string): Promise<void> => {
+    // If a custom email was typed, handle directly
+    if (customEmail && customEmail.trim()) {
+      const cleanEmail = customEmail.trim();
+      const derivedName = customName?.trim() || resolvePersonNameFromGoogle(null, cleanEmail);
 
-    const loggedInUser: UserProfile = {
-      id: `usr-${Date.now()}`,
-      name: formattedName || 'MNNIT Student',
-      email: creds.email,
-      provider: 'email',
-      branch: 'Computer Science & Engineering',
-      year: '3rd Year B.Tech',
-    };
+      const googleUser: UserProfile = {
+        id: `g-${Date.now()}`,
+        name: derivedName,
+        email: cleanEmail,
+        provider: 'google',
+        calendarConnected: true,
+        branch: 'Computer Science & Engineering',
+        year: '3rd Year B.Tech',
+      };
+      saveUserSession(googleUser);
+      return;
+    }
 
-    saveUserSession(loggedInUser);
-  };
+    try {
+      // Trigger genuine Firebase Google OAuth popup
+      const result = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+      const fUser = result.user;
 
-  const signupWithEmail = async (creds: SignupCredentials): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
+      const studentName = resolvePersonNameFromGoogle(fUser.displayName, fUser.email);
 
-    const newUser: UserProfile = {
-      id: `usr-${Date.now()}`,
-      name: creds.name,
-      email: creds.email,
-      phone: creds.phone,
-      provider: 'email',
-      branch: creds.branch || 'Computer Science & Engineering',
-      year: creds.year || '3rd Year B.Tech',
-    };
+      const profile: UserProfile = {
+        id: fUser.uid,
+        name: studentName,
+        email: fUser.email || 'student@mnnit.ac.in',
+        avatarUrl: fUser.photoURL || undefined,
+        provider: 'google',
+        calendarConnected: true,
+        branch: 'Computer Science & Engineering',
+        year: '3rd Year B.Tech',
+      };
 
-    saveUserSession(newUser);
-  };
+      if (token) {
+        localStorage.setItem('google_calendar_access_token', token);
+      }
 
-  const loginWithGoogle = async (): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    saveUserSession(DEMO_STUDENT);
+      saveUserSession(profile);
+    } catch (err: unknown) {
+      console.error('Firebase authentication failure:', err);
+      // Do not substitute with dummy demo user. Propagate genuine Firebase error to UI.
+      throw err;
+    }
   };
 
   const loginAsDemoStudent = () => {
     saveUserSession(DEMO_STUDENT);
   };
 
-  const logout = () => {
+  const loginWithEmail = async (creds: LoginCredentials): Promise<void> => {
+    await loginWithGoogle(creds.email);
+  };
+
+  const signupWithEmail = async (creds: SignupCredentials): Promise<void> => {
+    await loginWithGoogle(creds.email, creds.name);
+  };
+
+  const logout = async () => {
+    try {
+      await firebaseSignOut(auth);
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('google_calendar_access_token');
     saveUserSession(null);
   };
 
@@ -117,3 +188,5 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
+export default AuthContext;

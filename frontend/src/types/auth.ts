@@ -7,20 +7,21 @@ export interface UserProfile {
   branch?: string;
   year?: string;
   provider: 'google' | 'email';
+  calendarConnected?: boolean;
 }
 
 export interface LoginCredentials {
   email: string;
-  password: string;
+  password?: string;
   rememberMe?: boolean;
 }
 
 export interface SignupCredentials {
   name: string;
   email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
+  phone?: string;
+  password?: string;
+  confirmPassword?: string;
   branch?: string;
   year?: string;
 }
@@ -31,7 +32,7 @@ export interface AuthContextType {
   isLoading: boolean;
   loginWithEmail: (creds: LoginCredentials) => Promise<void>;
   signupWithEmail: (creds: SignupCredentials) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: (customEmail?: string, customName?: string) => Promise<void>;
   loginAsDemoStudent: () => void;
   logout: () => void;
 }

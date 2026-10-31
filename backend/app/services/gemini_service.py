@@ -10,7 +10,7 @@ Analyze the provided notice carefully and extract all actionable details strictl
 Extraction Rules:
 1. Deadlines: Extract every dated milestone (e.g., registration deadline, document submission, exam date). If a deadline is mentioned but the exact date is missing or ambiguous, set "date" to null and set "needs_confirmation" to true.
 2. Evidence: For every deadline, eligibility rule, and required document, extract a verbatim snippet (quoted text from the document, 20-150 characters) and the page number where it appears.
-3. Eligibility: Extract branches (e.g. ["CSE", "IT", "ECE"]), academic years eligible (e.g. ["3rd", "4th"]), minimum CGPA (numeric float e.g. 7.0), and other conditions (e.g. ["No active backlogs", "Indian nationals only"]).
+3. Eligibility: Extract eligible courses/degrees (e.g. ["B.Tech", "M.Tech", "MCA"] or ["All"]), branches (e.g. ["CSE", "IT", "ECE"]), academic years eligible (e.g. ["Pre-Final Year", "Final Year", "3rd", "4th"]), minimum CGPA (numeric float e.g. 7.0), and other conditions (e.g. ["No active backlogs", "Indian nationals only"]).
 4. Tasks: Formulate actionable steps a student must complete, each with its relevant due date.
 5. Return ONLY valid JSON matching this schema:
 {
@@ -25,6 +25,7 @@ Extraction Rules:
     }
   ],
   "eligibility": {
+    "courses": ["string"],
     "branches": ["string"],
     "years": ["string"],
     "min_cgpa": 0.0,
@@ -41,11 +42,10 @@ Extraction Rules:
 """
 
 SUPPORTED_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-flash-latest",
-    "gemini-3.8-flash",
+    "gemini-flash-lite-latest",
     "gemini-2.5-flash-lite",
-    "gemini-1.5-flash"
+    "gemini-flash-latest",
+    "gemini-pro-latest"
 ]
 
 class GeminiService:
@@ -199,11 +199,19 @@ class GeminiService:
                 "evidence": {"snippet": "No explicit deadline date identified in document text", "page": 1}
             })
 
+        courses = []
+        for c in ["B.Tech", "M.Tech", "MCA", "MBA", "M.Sc", "Ph.D."]:
+            if re.search(r'\b' + re.escape(c) + r'\b', notice_text, re.IGNORECASE):
+                courses.append(c)
+        if not courses:
+            courses = ["All"]
+
         return {
             "title": "University Academic / Placement Notice",
             "summary": "Official notice extracted with deadlines, academic eligibility, and action items.",
             "deadlines": deadlines,
             "eligibility": {
+                "courses": courses,
                 "branches": branches,
                 "years": ["3rd", "4th"],
                 "min_cgpa": min_cgpa,

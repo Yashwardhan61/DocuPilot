@@ -3,7 +3,8 @@ import {
   StudentProfile, 
   EligibilityEvaluation, 
   CalendarSyncResponse,
-  QuestionResponse 
+  QuestionResponse,
+  CourseMetadata
 } from '../types/notice';
 import { NoticeInput } from '../components/NoticeUpload/NoticeUpload';
 
@@ -68,6 +69,7 @@ export const api = {
     profile?: Partial<StudentProfile>
   ): Promise<EligibilityEvaluation> {
     const params = new URLSearchParams();
+    if (profile?.course) params.append('course', profile.course);
     if (profile?.branch) params.append('branch', profile.branch);
     if (profile?.year) params.append('year', profile.year);
     if (profile?.cgpa !== undefined) params.append('cgpa', profile.cgpa.toString());
@@ -82,6 +84,28 @@ export const api = {
       throw new ApiError('Failed to calculate eligibility', response.status);
     }
 
+    return response.json();
+  },
+
+  // Get duration and year structure for a course
+  async getCourseDuration(course: string): Promise<CourseMetadata> {
+    const response = await fetch(`${API_BASE}/course/duration?course=${encodeURIComponent(course)}`);
+    if (!response.ok) {
+      throw new ApiError('Failed to fetch course duration', response.status);
+    }
+    return response.json();
+  },
+
+  // Analyze a custom course with AI
+  async analyzeCourse(course: string): Promise<CourseMetadata> {
+    const response = await fetch(`${API_BASE}/course/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ course }),
+    });
+    if (!response.ok) {
+      throw new ApiError('Failed to analyze course with AI', response.status);
+    }
     return response.json();
   },
 
@@ -141,10 +165,21 @@ export const api = {
     return data.answer;
   },
 
-  // Sync to Google Calendar
-  async syncGoogleCalendar(noticeId: string): Promise<CalendarSyncResponse> {
-    const response = await fetch(`${API_BASE}/notices/${noticeId}/sync-google-calendar`, {
+  // Sync to Google Calendar with 12h & 3h prior reminders directly
+  async syncGoogleCalendar(noticeId: string, email?: string, accessToken?: string): Promise<CalendarSyncResponse> {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (accessToken) params.append('access_token', accessToken);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const headers: Record<string, string> = {};
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE}/notices/${noticeId}/sync-google-calendar${query}`, {
       method: 'POST',
+      headers,
     });
 
     if (!response.ok) {
@@ -161,8 +196,40 @@ export const api = {
     return response.json();
   },
 
-  // RFC 5545 calendar file download url
-  getIcsDownloadUrl(noticeId: string): string {
-    return `${API_BASE}/notices/${noticeId}/calendar.ics`;
+  // RFC 5545 calendar file download url with 12h & 3h VALARM triggers
+  getIcsDownloadUrl(noticeId: string, email?: string): string {
+    return email
+      ? `${API_BASE}/notices/${noticeId}/calendar.ics?email=${encodeURIComponent(email)}`
+      : `${API_BASE}/notices/${noticeId}/calendar.ics`;
+  },
+
+  // Generates direct 1-click Google Calendar Web Intent URL for student's personal calendar
+  generateDirectGoogleCalendarUrl(params: {
+    noticeTitle: string;
+    label: string;
+    date: string;
+    email?: string;
+    snippet?: string;
+  }): string {
+    const cleanDate = params.date.replace(/[^0-9]/g, '');
+    const dateFormatted = cleanDate.length >= 8 ? cleanDate.slice(0, 8) : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const datesParam = `${dateFormatted}/${dateFormatted}`;
+
+    const title = `[DocuPilot] ${params.label} - ${params.noticeTitle}`;
+    const details = `Notice: ${params.noticeTitle}\nMilestone: ${params.label}\nEvidence: ${params.snippet || 'Extracted via DocuPilot'}\n\nAutomated reminder alarms: 12h & 3h prior scheduled.`;
+
+    const urlParams = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: title,
+      dates: datesParam,
+      details: details,
+    });
+
+    if (params.email && params.email.includes('@')) {
+      urlParams.append('add', params.email);
+      urlParams.append('authuser', params.email);
+    }
+
+    return `https://calendar.google.com/calendar/render?${urlParams.toString()}`;
   },
 };

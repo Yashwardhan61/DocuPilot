@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api/notices", tags=["Eligibility"])
 @router.get("/{notice_id}/eligibility", response_model=EligibilityResultSchema)
 async def check_notice_eligibility(
     notice_id: str,
+    course: Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
     year: Optional[str] = Query(None),
     cgpa: Optional[float] = Query(None),
@@ -30,6 +31,9 @@ async def check_notice_eligibility(
     profile = saved_profile or {}
 
     # Query parameters override saved profile values.
+    if course is not None:
+        profile["course"] = course
+
     if branch is not None:
         profile["branch"] = branch
 

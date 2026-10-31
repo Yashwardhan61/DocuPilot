@@ -1,0 +1,16 @@
+{
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "DocuPilot",
+        "supportEmail": "yashwardhan2361@gmail.com",
+        "authorizedRedirectUris": [
+          "https://docupiolet.firebaseapp.com/__/auth/handler",
+          "http://localhost:5173",
+          "http://127.0.0.1:5173"
+        ]
+      }
+    }
+  }
+}
+

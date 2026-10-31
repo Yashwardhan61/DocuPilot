@@ -70,6 +70,7 @@ async def get_notice_details(notice_id: str):
     return data
 
 @router.post("/{notice_id}/ask", response_model=QuestionResponse)
+@router.post("/{notice_id}/qa", response_model=QuestionResponse)
 async def ask_notice_question(notice_id: str, payload: QuestionRequest):
     """
     Stretch feature: Answers student questions specifically grounded in the notice.

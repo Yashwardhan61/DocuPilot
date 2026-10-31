@@ -207,16 +207,45 @@ export const api = {
   generateDirectGoogleCalendarUrl(params: {
     noticeTitle: string;
     label: string;
-    date: string;
+    date?: string | null;
     email?: string;
     snippet?: string;
   }): string {
-    const cleanDate = params.date.replace(/[^0-9]/g, '');
-    const dateFormatted = cleanDate.length >= 8 ? cleanDate.slice(0, 8) : new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const datesParam = `${dateFormatted}/${dateFormatted}`;
+    const parseDate = (dateString?: string | null): Date => {
+      if (!dateString) return new Date();
+      try {
+        const iso = dateString.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+        if (iso) {
+          return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
+        }
+        const dmy = dateString.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+        if (dmy) {
+          return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10));
+        }
+        const parsed = new Date(dateString);
+        if (!isNaN(parsed.getTime())) return parsed;
+      } catch {
+        // fallback to current date
+      }
+      return new Date();
+    };
+
+    const d = parseDate(params.date);
+    const startYear = d.getFullYear();
+    const startMonth = String(d.getMonth() + 1).padStart(2, '0');
+    const startDay = String(d.getDate()).padStart(2, '0');
+    const startStr = `${startYear}${startMonth}${startDay}`;
+
+    const nextDay = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+    const endYear = nextDay.getFullYear();
+    const endMonth = String(nextDay.getMonth() + 1).padStart(2, '0');
+    const endDay = String(nextDay.getDate()).padStart(2, '0');
+    const endStr = `${endYear}${endMonth}${endDay}`;
+
+    const datesParam = `${startStr}/${endStr}`;
 
     const title = `[DocuPilot] ${params.label} - ${params.noticeTitle}`;
-    const details = `Notice: ${params.noticeTitle}\nMilestone: ${params.label}\nEvidence: ${params.snippet || 'Extracted via DocuPilot'}\n\nAutomated reminder alarms: 12h & 3h prior scheduled.`;
+    const details = `Notice: ${params.noticeTitle}\nMilestone: ${params.label}\nEvidence: ${params.snippet || 'Extracted via DocuPilot'}\n\nAutomated reminder alarms: 12h & 3h prior scheduled.\n(The companion .ics file provides 12-hour and 3-hour alarm triggers in 1 click).`;
 
     const urlParams = new URLSearchParams({
       action: 'TEMPLATE',

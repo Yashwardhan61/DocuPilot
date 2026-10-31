@@ -20,14 +20,19 @@ class CalendarService:
         Pre-populates title, dates, evidence, and attendee email.
         """
         date_val = deadline_item.get("date")
-        clean_date = "".join(c for c in str(date_val) if c.isdigit())
-        if len(clean_date) >= 8:
-            start_date = clean_date[:8]
-        else:
-            start_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+        d_obj = None
+        if date_val:
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    d_obj = datetime.strptime(str(date_val)[:10], fmt)
+                    break
+                except ValueError:
+                    pass
+        if not d_obj:
+            d_obj = datetime.now(timezone.utc)
         
-        # Whole day event representation: YYYYMMDD/YYYYMMDD
-        end_date = start_date
+        start_date = d_obj.strftime("%Y%m%d")
+        end_date = (d_obj + timedelta(days=1)).strftime("%Y%m%d")
         dates_param = f"{start_date}/{end_date}"
 
         label = deadline_item.get("label", "Deadline")

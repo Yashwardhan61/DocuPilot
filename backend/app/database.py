@@ -50,6 +50,10 @@ def init_db():
         user_id TEXT PRIMARY KEY,
         access_token TEXT,
         refresh_token TEXT,
+        token_uri TEXT,
+        client_id TEXT,
+        client_secret TEXT,
+        scopes TEXT,
         expiry TEXT,
         email TEXT,
         updated_at TEXT
@@ -70,6 +74,12 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+# Auto-initialize database schema on first import
+try:
+    init_db()
+except Exception:
+    pass
 
 # Database helper functions
 def save_notice(notice_id: str, title: str, filename: str, raw_text: str, page_count: int, extraction: dict):

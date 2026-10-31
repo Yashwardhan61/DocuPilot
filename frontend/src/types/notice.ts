@@ -33,7 +33,7 @@ export interface TaskItem {
 }
 
 export interface NoticeExtractionResult {
-  notice_id?: string;
+  notice_id: string;
   title: string;
   summary?: string;
   deadlines: DeadlineItem[];
@@ -53,3 +53,30 @@ export interface StepStatus {
   label: string;
 }
 
+export interface StudentProfile {
+  branch: string;
+  year: string;
+  cgpa: number;
+  active_backlogs: boolean;
+}
+
+export interface EligibilityEvaluation {
+  eligible: boolean;
+  branch_eligible: boolean;
+  year_eligible: boolean;
+  cgpa_eligible: boolean;
+  reasons: string[];
+  manual_checks: string[];
+  evidence_snippet?: string | null;
+}
+
+export interface QuestionResponse {
+  answer: string;
+}
+
+export interface CalendarSyncResponse {
+  success: boolean;
+  synced_events_count: number;
+  message: string;
+  events?: Array<{ title?: string; event_id?: string; html_link?: string }>;
+}

@@ -141,9 +141,12 @@ export const api = {
     return data.answer;
   },
 
-  // Sync to Google Calendar
-  async syncGoogleCalendar(noticeId: string): Promise<CalendarSyncResponse> {
-    const response = await fetch(`${API_BASE}/notices/${noticeId}/sync-google-calendar`, {
+  // Sync to Google Calendar with 12h & 3h prior reminders
+  async syncGoogleCalendar(noticeId: string, email?: string): Promise<CalendarSyncResponse> {
+    const url = email 
+      ? `${API_BASE}/notices/${noticeId}/sync-google-calendar?email=${encodeURIComponent(email)}`
+      : `${API_BASE}/notices/${noticeId}/sync-google-calendar`;
+    const response = await fetch(url, {
       method: 'POST',
     });
 
@@ -161,8 +164,39 @@ export const api = {
     return response.json();
   },
 
-  // RFC 5545 calendar file download url
-  getIcsDownloadUrl(noticeId: string): string {
-    return `${API_BASE}/notices/${noticeId}/calendar.ics`;
+  // RFC 5545 calendar file download url with 12h & 3h VALARM triggers
+  getIcsDownloadUrl(noticeId: string, email?: string): string {
+    return email
+      ? `${API_BASE}/notices/${noticeId}/calendar.ics?email=${encodeURIComponent(email)}`
+      : `${API_BASE}/notices/${noticeId}/calendar.ics`;
+  },
+
+  // Generates direct 1-click Google Calendar Web Intent URL for student's personal calendar
+  generateDirectGoogleCalendarUrl(params: {
+    noticeTitle: string;
+    label: string;
+    date: string;
+    email?: string;
+    snippet?: string;
+  }): string {
+    const cleanDate = params.date.replace(/[^0-9]/g, '');
+    const dateFormatted = cleanDate.length >= 8 ? cleanDate.slice(0, 8) : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const datesParam = `${dateFormatted}/${dateFormatted}`;
+
+    const title = `[DocuPilot] ${params.label} - ${params.noticeTitle}`;
+    const details = `Notice: ${params.noticeTitle}\nMilestone: ${params.label}\nEvidence: ${params.snippet || 'Extracted via DocuPilot'}\n\nAutomated reminder alarms: 12h & 3h prior scheduled.`;
+
+    const urlParams = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: title,
+      dates: datesParam,
+      details: details,
+    });
+
+    if (params.email && params.email.includes('@')) {
+      urlParams.append('add', params.email);
+    }
+
+    return `https://calendar.google.com/calendar/render?${urlParams.toString()}`;
   },
 };

@@ -1,13 +1,108 @@
 import uuid
 from datetime import datetime, timezone
-import httpx
-from typing import Dict, Any, List
+import urllib.parse
+from typing import Dict, Any, List, Optional
+
+try:
+    import httpx
+except ImportError:
+    httpx = None
 
 class CalendarService:
     @staticmethod
-    def generate_ics_content(notice_title: str, deadlines: List[Dict[str, Any]]) -> str:
+    def generate_google_calendar_url(
+        notice_title: str,
+        deadline_item: Dict[str, Any],
+        student_email: Optional[str] = None
+    ) -> str:
         """
-        Generates RFC 5545 compliant iCalendar (.ics) string.
+        Generates a direct Google Calendar Web Intent URL for 1-click reminder creation.
+        Pre-populates title, dates, evidence, and attendee email.
+        """
+        date_val = deadline_item.get("date")
+        clean_date = "".join(c for c in str(date_val) if c.isdigit())
+        if len(clean_date) >= 8:
+            start_date = clean_date[:8]
+        else:
+            start_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+        
+        # Whole day event representation: YYYYMMDD/YYYYMMDD
+        end_date = start_date
+        dates_param = f"{start_date}/{end_date}"
+
+        label = deadline_item.get("label", "Deadline")
+        summary = f"[DocuPilot] {label} - {notice_title}"
+        
+        snippet = deadline_item.get("evidence", {}).get("snippet", "Notice deadline verified by DocuPilot")
+        page = deadline_item.get("evidence", {}).get("page", 1)
+        description = (
+            f"Notice: {notice_title}\n"
+            f"Milestone: {label}\n"
+            f"Evidence: {snippet} (Page {page})\n\n"
+            "DocuPilot Automated Notice-to-Action Reminder (12h & 3h prior notification enabled)."
+        )
+
+        params: Dict[str, str] = {
+            "action": "TEMPLATE",
+            "text": summary,
+            "dates": dates_param,
+            "details": description,
+        }
+
+        if student_email and "@" in student_email:
+            params["add"] = student_email
+
+        query_string = urllib.parse.urlencode(params)
+        return f"https://calendar.google.com/calendar/render?{query_string}"
+
+    @staticmethod
+    def build_google_calendar_event_body(
+        notice_title: str,
+        deadline_item: Dict[str, Any],
+        student_email: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Builds the event payload for Google Calendar API v3 with 12-hour and 3-hour prior reminder overrides.
+        """
+        date_val = deadline_item.get("date")
+        date_str = str(date_val)[:10] if date_val else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        label = deadline_item.get("label", "Deadline")
+
+        evidence = deadline_item.get("evidence", {}).get("snippet", "")
+        page = deadline_item.get("evidence", {}).get("page", 1)
+
+        event_body: Dict[str, Any] = {
+            "summary": f"[DocuPilot] {label} - {notice_title}",
+            "description": (
+                f"Notice: {notice_title}\n"
+                f"Evidence: {evidence}\n"
+                f"Page: {page}\n\n"
+                "Automated notice reminder synchronized by DocuPilot."
+            ),
+            "start": {"date": date_str},
+            "end": {"date": date_str},
+            "reminders": {
+                "useDefault": False,
+                "overrides": [
+                    {"method": "popup", "minutes": 720}, # 12 hours prior
+                    {"method": "popup", "minutes": 180}  # 3 hours prior
+                ]
+            }
+        }
+
+        if student_email and "@" in student_email:
+            event_body["attendees"] = [{"email": student_email}]
+
+        return event_body
+
+    @staticmethod
+    def generate_ics_content(
+        notice_title: str,
+        deadlines: List[Dict[str, Any]],
+        student_email: Optional[str] = None
+    ) -> str:
+        """
+        Generates RFC 5545 compliant iCalendar (.ics) string with 12h and 3h reminder alarms.
         Compatible with Google Calendar, Apple Calendar, and Microsoft Outlook.
         """
         lines = [
@@ -25,7 +120,6 @@ class CalendarService:
             if not date_val:
                 continue
 
-            # Standardize date to YYYYMMDD
             clean_date = "".join(c for c in str(date_val) if c.isdigit())
             if len(clean_date) >= 8:
                 dt_start = clean_date[:8]
@@ -35,32 +129,58 @@ class CalendarService:
             event_uid = f"{uuid.uuid4()}@docupilot.local"
             summary = f"[DocuPilot] {item.get('label', 'Deadline')} - {notice_title}"
             evidence = item.get("evidence", {}).get("snippet", "Extracted via DocuPilot")
-            description = f"Notice: {notice_title}\\nEvidence: {evidence}\\nAutomated deadline created by DocuPilot."
+            description = f"Notice: {notice_title}\\nEvidence: {evidence}\\nDocuPilot reminder alarms: 12h & 3h prior."
 
-            lines.extend([
+            event_lines = [
                 "BEGIN:VEVENT",
                 f"UID:{event_uid}",
                 f"DTSTAMP:{now_str}",
                 f"DTSTART;VALUE=DATE:{dt_start}",
                 f"SUMMARY:{summary}",
                 f"DESCRIPTION:{description}",
-                "STATUS:CONFIRMED",
+                "STATUS:CONFIRMED"
+            ]
+
+            if student_email and "@" in student_email:
+                event_lines.append(f"ATTENDEE;CN=Student;ROLE=REQ-PARTICIPANT:mailto:{student_email}")
+
+            # 12-hour prior alarm (-PT12H)
+            event_lines.extend([
                 "BEGIN:VALARM",
-                "TRIGGER:-P1D",
+                "TRIGGER:-PT12H",
                 "ACTION:DISPLAY",
-                "DESCRIPTION:Reminder: Upcoming deadline tomorrow",
+                "DESCRIPTION:DocuPilot Reminder: Upcoming deadline in 12 hours",
+                "END:VALARM"
+            ])
+
+            # 3-hour prior alarm (-PT3H)
+            event_lines.extend([
+                "BEGIN:VALARM",
+                "TRIGGER:-PT3H",
+                "ACTION:DISPLAY",
+                "DESCRIPTION:DocuPilot Final Alert: Upcoming deadline in 3 hours",
                 "END:VALARM",
                 "END:VEVENT"
             ])
+
+            lines.extend(event_lines)
 
         lines.append("END:VCALENDAR")
         return "\r\n".join(lines) + "\r\n"
 
     @staticmethod
-    async def sync_to_google_calendar(access_token: str, notice_title: str, deadlines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def sync_to_google_calendar(
+        access_token: str,
+        notice_title: str,
+        deadlines: List[Dict[str, Any]],
+        student_email: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Inserts events directly into the student's primary Google Calendar using Google Calendar API v3.
+        Inserts events directly into the student's personal Google Calendar using Google Calendar API v3.
         """
+        if httpx is None:
+            raise RuntimeError("httpx package is required for direct Google Calendar API sync.")
+
         created_events = []
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -69,28 +189,14 @@ class CalendarService:
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             for item in deadlines:
-                date_val = item.get("date")
-                if not date_val:
+                if not item.get("date"):
                     continue
 
-                event_body = {
-                    "summary": f"[DocuPilot] {item.get('label', 'Deadline')} - {notice_title}",
-                    "description": (
-                        f"Notice: {notice_title}\n"
-                        f"Evidence: {item.get('evidence', {}).get('snippet', '')}\n"
-                        f"Page: {item.get('evidence', {}).get('page', 1)}\n\n"
-                        "Automated deadline synchronized by DocuPilot."
-                    ),
-                    "start": {"date": str(date_val)[:10]},
-                    "end": {"date": str(date_val)[:10]},
-                    "reminders": {
-                        "useDefault": False,
-                        "overrides": [
-                            {"method": "popup", "minutes": 24 * 60},  # 1 day before
-                            {"method": "popup", "minutes": 3 * 60}    # 3 hours before
-                        ]
-                    }
-                }
+                event_body = CalendarService.build_google_calendar_event_body(
+                    notice_title=notice_title,
+                    deadline_item=item,
+                    student_email=student_email
+                )
 
                 url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
                 resp = await client.post(url, headers=headers, json=event_body)
@@ -98,10 +204,8 @@ class CalendarService:
                     ev = resp.json()
                     created_events.append({
                         "event_id": ev.get("id"),
-                        "htmlLink": ev.get("htmlLink"),
-                        "summary": ev.get("summary")
+                        "summary": event_body["summary"],
+                        "htmlLink": ev.get("htmlLink", "")
                     })
-                else:
-                    print(f"Google Calendar event insertion error {resp.status_code}: {resp.text}")
 
         return created_events

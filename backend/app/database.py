@@ -13,6 +13,29 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Users table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        full_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        created_at TEXT
+    )
+    """)
+
+    # User sessions table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+    """)
+
     # Notices table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS notices (
@@ -82,6 +105,90 @@ except Exception:
     pass
 
 # Database helper functions
+
+def create_user(user_id: str, email: str, full_name: str, password_hash: str, salt: str) -> Dict[str, Any]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        INSERT INTO users (id, email, full_name, password_hash, salt, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (user_id, email.lower().strip(), full_name.strip(), password_hash, salt, now_iso))
+    conn.commit()
+    conn.close()
+    return {
+        "id": user_id,
+        "email": email.lower().strip(),
+        "full_name": full_name.strip(),
+        "created_at": now_iso
+    }
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE lower(email) = ?", (email.lower().strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+def create_user_session(token: str, user_id: str, expires_at: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        INSERT OR REPLACE INTO user_sessions (token, user_id, expires_at, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (token, user_id, expires_at, now_iso))
+    conn.commit()
+    conn.close()
+
+def get_user_by_session_token(token: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.id, u.email, u.full_name, u.created_at, s.expires_at
+        FROM user_sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = ?
+    """, (token,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    # Check expiry
+    try:
+        exp_time = datetime.fromisoformat(row["expires_at"])
+        if datetime.now(timezone.utc) > exp_time:
+            delete_user_session(token)
+            return None
+    except Exception:
+        pass
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "full_name": row["full_name"],
+        "created_at": row["created_at"]
+    }
+
+def delete_user_session(token: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+
 def save_notice(notice_id: str, title: str, filename: str, raw_text: str, page_count: int, extraction: dict):
     conn = get_connection()
     cursor = conn.cursor()

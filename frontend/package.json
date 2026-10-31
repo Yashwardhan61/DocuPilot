@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/cleanup-tests.js",
     "test:watch": "vitest"
   },
   "dependencies": {

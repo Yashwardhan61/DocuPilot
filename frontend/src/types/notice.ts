@@ -54,10 +54,13 @@ export interface StepStatus {
 }
 
 export interface StudentProfile {
+  course?: string;
+  department?: string;
   branch: string;
   year: string;
   cgpa: number;
   active_backlogs: boolean;
+  profile_completed?: boolean;
 }
 
 export interface EligibilityEvaluation {

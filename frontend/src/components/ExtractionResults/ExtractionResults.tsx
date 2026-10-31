@@ -87,11 +87,20 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           const allowedYears = result.eligibility?.years || [];
           const minCgpa = result.eligibility?.min_cgpa ?? 0;
 
-          const branchMatch = allowedBranches.length === 0 || allowedBranches.some((b) =>
-            b.toLowerCase().includes(studentProfile.branch.toLowerCase()) ||
-            studentProfile.branch.toLowerCase().includes(b.toLowerCase()) ||
-            b.toLowerCase().includes('all')
-          );
+          const studentCourse = (studentProfile.course || 'B.Tech').toLowerCase();
+          const studentBranch = studentProfile.branch.toLowerCase();
+          const studentDept = (studentProfile.department || '').toLowerCase();
+
+          const branchMatch = allowedBranches.length === 0 || allowedBranches.some((b) => {
+            const bLow = b.toLowerCase();
+            return (
+              bLow.includes('all') ||
+              bLow.includes(studentBranch) ||
+              studentBranch.includes(bLow) ||
+              bLow.includes(studentCourse) ||
+              (studentDept && bLow.includes(studentDept))
+            );
+          });
 
           const yearMatch = allowedYears.length === 0 || allowedYears.some((y) => {
             const yLower = y.toLowerCase();
@@ -106,7 +115,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           const eligible = branchMatch && yearMatch && cgpaMatch && backlogMatch;
 
           const reasons: string[] = [];
-          if (!branchMatch) reasons.push(`Department ${studentProfile.branch} is not among the target branches.`);
+          if (!branchMatch) reasons.push(`Program ${studentProfile.course || 'B.Tech'} in ${studentProfile.branch} is not among the target disciplines.`);
           if (!yearMatch) reasons.push(`Year ${studentProfile.year} does not meet circular year criteria.`);
           if (!cgpaMatch) reasons.push(`CPI ${studentProfile.cgpa.toFixed(1)} is below the minimum required ${minCgpa}.`);
           if (!backlogMatch) reasons.push('Candidate has active backlogs; zero backlogs required.');
@@ -303,11 +312,24 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
 
           {/* Quick Profile Modifier */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Branch Selector */}
+            {/* Course Selector */}
+            <select
+              value={studentProfile.course || 'B.Tech'}
+              onChange={(e) => onUpdateProfile({ ...studentProfile, course: e.target.value })}
+              className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Select Degree Program / Course"
+            >
+              {['B.Tech', 'M.Tech', 'MCA', 'MBA', 'M.Sc', 'Ph.D.'].map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+
+            {/* Department (Branch) Selector */}
             <select
               value={studentProfile.branch}
               onChange={(e) => onUpdateProfile({ ...studentProfile, branch: e.target.value })}
               className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Select Academic Department"
             >
               {MNNIT_BRANCHES.map((b) => (
                 <option key={b} value={b}>{b}</option>

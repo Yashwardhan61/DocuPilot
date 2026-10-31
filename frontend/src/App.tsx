@@ -5,6 +5,7 @@ import { NoticeUpload, NoticeInput } from './components/NoticeUpload/NoticeUploa
 import { LoadingSkeleton } from './components/LoadingSkeleton/LoadingSkeleton';
 import { ExtractionResults } from './components/ExtractionResults/ExtractionResults';
 import { EvidenceModal } from './components/EvidenceModal/EvidenceModal';
+import { ProfileSetupModal } from './components/ProfileModal/ProfileSetupModal';
 import { NoticeExtractionResult, ProcessingStep, Evidence, StudentProfile } from './types/notice';
 import { Compass, Sparkles, UserCheck, Shield, LogOut, User, Calendar } from 'lucide-react';
 import { api } from './services/api';
@@ -20,11 +21,15 @@ const AppInner: React.FC = () => {
 
   // Student profile state
   const [profile, setProfile] = useState<StudentProfile>({
+    course: 'B.Tech',
+    department: 'Computer Science & Engineering',
     branch: 'CSE',
     year: '3rd',
     cgpa: 8.0,
     active_backlogs: false,
+    profile_completed: false,
   });
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Evidence Modal state
   const [evidenceModal, setEvidenceModal] = useState<{
@@ -37,14 +42,31 @@ const AppInner: React.FC = () => {
 
   // Load saved student profile on initial mount
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem('docupilot_student_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.profile_completed) {
+          setProfile(parsed);
+          return;
+        }
+      }
+    } catch {
+      // fallback
+    }
+
     api.getProfile()
       .then((saved) => {
-        if (saved && saved.branch) {
+        if (saved && saved.branch && saved.profile_completed) {
           setProfile(saved);
+        } else {
+          // New user: must configure Course and Department first
+          setIsProfileModalOpen(true);
         }
       })
       .catch(() => {
-        // use default profile
+        // New user: must configure Course and Department first
+        setIsProfileModalOpen(true);
       });
   }, []);
 
@@ -98,6 +120,8 @@ const AppInner: React.FC = () => {
 
   const handleUpdateProfile = async (updated: StudentProfile) => {
     setProfile(updated);
+    setIsProfileModalOpen(false);
+    localStorage.setItem('docupilot_student_profile', JSON.stringify(updated));
     try {
       await api.saveProfile(updated);
     } catch {
@@ -128,10 +152,16 @@ const AppInner: React.FC = () => {
 
           {/* Right side badges & user info */}
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-xs text-slate-600 bg-slate-100/80 px-3 py-1.5 rounded-lg border border-slate-200/60">
+            {/* Student Course & Department Badge */}
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="hidden md:flex items-center gap-2 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200/80 px-3 py-1.5 rounded-lg border border-slate-200/60 transition-colors cursor-pointer"
+              title="Click to change Course, Department, or Year"
+            >
               <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-              <span>{profile.branch} • {profile.year} • CPI {profile.cgpa.toFixed(1)}</span>
-            </div>
+              <span>{profile.course || 'B.Tech'} • {profile.branch} • {profile.year} • CPI {profile.cgpa.toFixed(1)}</span>
+            </button>
             {user?.email && (
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600" />
@@ -214,6 +244,14 @@ const AppInner: React.FC = () => {
         fieldName={evidenceModal.fieldName}
         evidence={evidenceModal.evidence}
         onClose={handleCloseEvidence}
+      />
+
+      <ProfileSetupModal
+        isOpen={isProfileModalOpen}
+        initialProfile={profile}
+        onSave={handleUpdateProfile}
+        onClose={() => setIsProfileModalOpen(false)}
+        isMandatory={!profile.profile_completed}
       />
 
       {/* Footer */}

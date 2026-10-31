@@ -195,6 +195,7 @@ export const api = {
 
     if (params.email && params.email.includes('@')) {
       urlParams.append('add', params.email);
+      urlParams.append('authuser', params.email);
     }
 
     return `https://calendar.google.com/calendar/render?${urlParams.toString()}`;

@@ -6,7 +6,7 @@ import { LoadingSkeleton } from './components/LoadingSkeleton/LoadingSkeleton';
 import { ExtractionResults } from './components/ExtractionResults/ExtractionResults';
 import { EvidenceModal } from './components/EvidenceModal/EvidenceModal';
 import { NoticeExtractionResult, ProcessingStep, Evidence, StudentProfile } from './types/notice';
-import { Compass, Sparkles, UserCheck, Shield, LogOut, User } from 'lucide-react';
+import { Compass, Sparkles, UserCheck, Shield, LogOut, User, Calendar } from 'lucide-react';
 import { api } from './services/api';
 
 // Inner App (rendered only when authenticated)
@@ -132,17 +132,27 @@ const AppInner: React.FC = () => {
               <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
               <span>{profile.branch} • {profile.year} • CPI {profile.cgpa.toFixed(1)}</span>
             </div>
+            {user?.email && (
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="font-medium">Calendar: {user.email}</span>
+              </div>
+            )}
             <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               Gemini Vision
             </span>
 
-            {/* Authenticated User Badge */}
-            <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-2 pr-3 py-1">
-              <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-xs font-medium text-slate-700 hidden sm:block">{user?.name ?? 'Student'}</span>
+            {/* Authenticated User Badge with Google Avatar & Name */}
+            <div className="flex items-center gap-2 bg-slate-100 rounded-full pl-1.5 pr-3 py-1 border border-slate-200">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-6 h-6 rounded-full object-cover border border-slate-300" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs">
+                  <User className="w-3.5 h-3.5" />
+                </div>
+              )}
+              <span className="text-xs font-semibold text-slate-800 hidden sm:block">{user?.name ?? 'Student'}</span>
             </div>
 
             {/* Logout button */}

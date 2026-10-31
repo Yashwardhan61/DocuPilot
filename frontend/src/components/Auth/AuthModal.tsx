@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ShieldCheck, Phone, Mail, Lock, User as UserIcon } from 'lucide-react';
+import { Calendar, ShieldCheck, ArrowRight, CheckCircle2, Lock, AlertCircle, Settings } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { isFirebaseConfigured, loadActiveFirebaseConfig, saveFirebaseConfig, FirebaseWebConfig } from '../../services/firebase';
 
-// Inline Google SVG icon
+// Authentic Google SVG Icon
 const GoogleIcon = () => (
-  <svg className="mr-2.5 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+  <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
     <path
       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
       fill="#4285F4"
@@ -25,318 +26,249 @@ const GoogleIcon = () => (
 );
 
 export const AuthModal: React.FC = () => {
-  const { loginWithEmail, signupWithEmail, loginWithGoogle, loginAsDemoStudent } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  
-  // Form fields
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { loginWithGoogle, loginAsDemoStudent } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
 
-  // Validation rules
-  const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
-  const isValidPassword = (val: string) => val.length >= 8;
-  const isValidPhone = (val: string) => {
-    // Accepts 10 digits or standard international format (+91XXXXXXXXXX)
-    const cleaned = val.replace(/[\s-]/g, '');
-    return /^\+?[0-9]{10,13}$/.test(cleaned);
-  };
+  // Custom Firebase configuration state
+  const currentConfig = loadActiveFirebaseConfig();
+  const [configForm, setConfigForm] = useState<FirebaseWebConfig>({
+    apiKey: currentConfig.apiKey || '',
+    authDomain: currentConfig.authDomain || '',
+    projectId: currentConfig.projectId || '',
+    appId: currentConfig.appId || '',
+    storageBucket: currentConfig.storageBucket || '',
+    messagingSenderId: currentConfig.messagingSenderId || '',
+  });
 
-  const canSubmitLogin = isValidEmail(email) && isValidPassword(password);
-  const canSubmitSignup =
-    fullName.trim().length >= 2 &&
-    isValidEmail(email) &&
-    isValidPhone(phone) &&
-    isValidPassword(password) &&
-    password === confirmPassword;
+  const configured = isFirebaseConfigured();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (mode === 'signup' && !isValidPhone(phone)) {
-      setError('Please provide a valid 10-digit phone number');
-      return;
-    }
-
-    if (mode === 'signup' && password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
+  const handleGoogleSignIn = async () => {
     setLoading(true);
+    setAuthError(null);
     try {
-      if (mode === 'login') {
-        await loginWithEmail({ email, password });
-      } else {
-        await signupWithEmail({
-          name: fullName.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          password,
-          confirmPassword,
-        });
-      }
+      await loginWithGoogle();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      let message = 'Firebase authentication encountered an error.';
+      if (err && typeof err === 'object') {
+        const anyErr = err as { code?: string; message?: string };
+        if (anyErr.code === 'auth/configuration-not-found' || anyErr.message?.includes('configuration-not-found')) {
+          message = 'Firebase Authentication is not activated in project "docupiolet" yet. Open Firebase Console and click "Get started" under Authentication > Sign-in method > Google.';
+        } else if (anyErr.code === 'auth/invalid-api-key' || anyErr.message?.includes('invalid-api-key')) {
+          message = 'Firebase API Key is invalid or not yet configured. Please provide your real Firebase project keys below.';
+          setShowConfig(true);
+        } else if (anyErr.code === 'auth/popup-closed-by-user') {
+          message = 'The Google sign-in popup was closed before authentication could finish.';
+        } else if (anyErr.code === 'auth/unauthorized-domain') {
+          message = 'This domain (localhost) is not in your Firebase Authorized Domains list. Add localhost in Firebase Console > Authentication > Settings > Authorized domains.';
+        } else if (anyErr.message) {
+          message = anyErr.message;
+        }
+      }
+      setAuthError(message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!configForm.apiKey.trim() || !configForm.projectId.trim()) {
+      setAuthError('API Key and Project ID are required.');
+      return;
+    }
+    saveFirebaseConfig({
+      ...configForm,
+      authDomain: configForm.authDomain.trim() || `${configForm.projectId.trim()}.firebaseapp.com`,
+    });
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 sm:p-8 space-y-6 my-auto border border-slate-200">
-        {/* Header */}
-        <div className="text-center space-y-1.5">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 text-white shadow-xs mb-1">
-            <ShieldCheck className="w-5 h-5 text-indigo-400" />
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans text-slate-900">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        {/* Header Branding */}
+        <div className="text-center space-y-3 mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-900 text-white shadow-md shadow-slate-900/10 mb-1">
+            <ShieldCheck className="w-8 h-8 text-indigo-400" />
           </div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">DocuPilot</h1>
-          <p className="text-xs text-slate-500">Notice-to-Action Agent for MNNIT Students</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">DocuPilot</h1>
+          <p className="text-xs text-slate-600 max-w-sm mx-auto font-medium">
+            Notice-to-Action Agent for MNNIT Allahabad Students
+          </p>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <Lock className="w-3 h-3 text-indigo-600" />
+            <span>Firebase Authentication & Google OAuth</span>
+          </div>
         </div>
 
-        {/* Tab Toggle */}
-        <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'login'}
-            onClick={() => { setMode('login'); setError(null); }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              mode === 'login' 
-                ? 'bg-white text-slate-900 shadow-xs' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'signup'}
-            onClick={() => { setMode('signup'); setError(null); }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              mode === 'signup' 
-                ? 'bg-white text-slate-900 shadow-xs' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Create Account
-          </button>
-        </div>
+        {/* Light Theme Card */}
+        <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/60 space-y-6">
+          <div className="space-y-1.5 text-center">
+            <h2 className="text-lg font-bold text-slate-900">Student Sign In</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Sign in with your student Google account to parse notices, verify eligibility, and sync reminders directly to your Google Calendar.
+            </p>
+          </div>
 
-        {/* Direct Google Login */}
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={loginWithGoogle}
-            className="flex items-center justify-center w-full py-2.5 px-4 border border-slate-300 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors shadow-xs"
-          >
-            <GoogleIcon />
-            <span>Continue with Google</span>
-          </button>
+          {/* Config Alert if not configured */}
+          {!configured && !authError && (
+            <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-left">
+                <span className="font-semibold block">Firebase Project Setup Needed</span>
+                <span className="text-[11px] text-amber-800 leading-normal block">
+                  To authenticate via your real Google account on Firebase servers, enter your Firebase web app keys below or configure frontend/.env.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowConfig(true)}
+                  className="text-[11px] font-bold text-indigo-700 hover:underline flex items-center gap-1 mt-1"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span>Enter Firebase Web Config</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-          {mode === 'login' && (
+          {/* Error Banner */}
+          {authError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-left flex-1">
+                <span className="font-semibold block">Authentication Notice</span>
+                <span className="text-[11px] text-rose-600 leading-normal block">{authError}</span>
+                {authError.includes('docupiolet') && (
+                  <a
+                    href="https://console.firebase.google.com/project/docupiolet/authentication"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-indigo-700 hover:underline"
+                  >
+                    <span>Open Firebase Console Authentication</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Primary Action: Continue with Google */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="flex items-center justify-center w-full py-3.5 px-4 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 rounded-2xl text-sm font-semibold text-slate-800 transition-all shadow-xs hover:shadow-md disabled:opacity-60"
+            >
+              <GoogleIcon />
+              <span>{loading ? 'Opening Firebase Google Popup...' : 'Continue with Google'}</span>
+            </button>
+
+            {/* Quick Demo Access for evaluators */}
             <button
               type="button"
               onClick={loginAsDemoStudent}
-              className="w-full py-2 px-3 border border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold transition-colors text-center"
+              className="flex items-center justify-center w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 rounded-2xl text-xs font-semibold transition-colors"
             >
-              Demo Student Quick Access
+              <span>Demo Student Quick Access (yash.2024@mnnit.ac.in)</span>
             </button>
-          )}
+          </div>
+
+          {/* Expandable Firebase Configuration Form */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              className="text-xs text-slate-500 hover:text-slate-800 transition-colors w-full text-center flex items-center justify-center gap-1.5"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-400" />
+              <span>{showConfig ? 'Hide Firebase Config' : 'Configure Real Firebase Project Keys'}</span>
+            </button>
+
+            {showConfig && (
+              <form onSubmit={handleSaveConfig} className="space-y-3 pt-3 border-t border-slate-100 mt-2 text-left">
+                <p className="text-[11px] text-slate-500">
+                  Paste your Firebase Web credentials (from Firebase Console &gt; Project Settings &gt; General):
+                </p>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">apiKey</label>
+                  <input
+                    type="text"
+                    required
+                    value={configForm.apiKey}
+                    onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">authDomain</label>
+                  <input
+                    type="text"
+                    value={configForm.authDomain}
+                    onChange={(e) => setConfigForm({ ...configForm, authDomain: e.target.value })}
+                    placeholder="my-project.firebaseapp.com"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">projectId</label>
+                  <input
+                    type="text"
+                    required
+                    value={configForm.projectId}
+                    onChange={(e) => setConfigForm({ ...configForm, projectId: e.target.value })}
+                    placeholder="my-project-id"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">appId</label>
+                  <input
+                    type="text"
+                    value={configForm.appId}
+                    onChange={(e) => setConfigForm({ ...configForm, appId: e.target.value })}
+                    placeholder="1:123456789:web:abcdef..."
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all shadow-xs"
+                >
+                  <span>Save Real Firebase Keys & Connect</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Google Calendar Link Notification */}
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800 shrink-0 mt-0.5">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div className="space-y-1 text-left">
+              <p className="text-xs font-bold text-emerald-950">Google Calendar Connected</p>
+              <p className="text-[11px] text-emerald-800/90 leading-relaxed">
+                Signing in enables automated scheduling of 12-hour and 3-hour prior reminder alerts for all circular deadlines on your personal calendar.
+              </p>
+            </div>
+          </div>
+
+          {/* Verification Guarantee */}
+          <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 pt-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Deterministic verification • Grounded notice citations</span>
+          </div>
         </div>
 
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200" />
-          </div>
-          <div className="relative flex justify-center text-[11px] font-medium text-slate-400 bg-white px-3">
-            or continue with credentials
-          </div>
-        </div>
-
-        {/* Email & Password Form */}
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          {mode === 'signup' && (
-            <div>
-              <label htmlFor="fullName" className="block text-xs font-semibold text-slate-700 mb-1">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <UserIcon className="h-4 w-4" />
-                </div>
-                <input
-                  id="fullName"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  placeholder="e.g. Yashwardhan Singh"
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1">
-              Email Address
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Mail className="h-4 w-4" />
-              </div>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="student@mnnit.ac.in"
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            {email && !isValidEmail(email) && (
-              <p className="text-[11px] text-amber-600 mt-1">Please enter a valid email address.</p>
-            )}
-          </div>
-
-          {mode === 'signup' && (
-            <div>
-              <label htmlFor="phone" className="block text-xs font-semibold text-slate-700 mb-1">
-                Phone Number
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Phone className="h-4 w-4" />
-                </div>
-                <input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  placeholder="10-digit mobile number"
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              {phone && !isValidPhone(phone) && (
-                <p className="text-[11px] text-rose-600 mt-1">Please enter a valid 10-digit mobile number.</p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1">
-              Password
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Lock className="h-4 w-4" />
-              </div>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="At least 8 characters"
-                className="w-full pl-9 pr-10 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            {password && !isValidPassword(password) && (
-              <p className="text-[11px] text-amber-600 mt-1">Password must be at least 8 characters.</p>
-            )}
-          </div>
-
-          {mode === 'signup' && (
-            <div>
-              <label htmlFor="confirmPassword" className="block text-xs font-semibold text-slate-700 mb-1">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="h-4 w-4" />
-                </div>
-                <input
-                  id="confirmPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  placeholder="Re-enter your password"
-                  className="w-full pl-9 pr-10 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-[11px] text-rose-600 mt-1">Passwords do not match.</p>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || (mode === 'login' ? !canSubmitLogin : !canSubmitSignup)}
-            className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs flex items-center justify-center gap-2"
-          >
-            {loading && (
-              <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            )}
-            <span>{mode === 'login' ? 'Sign In' : 'Complete Registration'}</span>
-          </button>
-        </form>
-
-        {/* Footer switch */}
-        <p className="text-center text-xs text-slate-500">
-          {mode === 'login' ? (
-            <>
-              First time on DocuPilot?{' '}
-              <button 
-                type="button" 
-                onClick={() => { setMode('signup'); setError(null); }} 
-                className="text-indigo-600 hover:underline font-bold"
-              >
-                Create Account
-              </button>
-            </>
-          ) : (
-            <>
-              Already registered?{' '}
-              <button 
-                type="button" 
-                onClick={() => { setMode('login'); setError(null); }} 
-                className="text-indigo-600 hover:underline font-bold"
-              >
-                Sign In
-              </button>
-            </>
-          )}
+        {/* Footer */}
+        <p className="mt-8 text-center text-xs text-slate-500">
+          DocuPilot • Hacktoberfest Hack Day Prayagraj x CC Club MNNIT
         </p>
       </div>
     </div>

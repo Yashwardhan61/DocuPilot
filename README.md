@@ -17,8 +17,11 @@
 
 ## Video Demonstration
 
-Watch the complete 2 to 3 minute demonstration of DocuPilot in action:
-- **Google Drive Video Player**: [Click to Watch Full Walkthrough Video](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
+Click the video player below to watch the complete 2 to 3 minute walkthrough of DocuPilot in action:
+
+[![DocuPilot Video Demo Player](docs/screenshots/video_player_preview.png)](https://drive.google.com/file/d/1_SDS5hW5lJMOVNS8O5hRELwfgoPM5DOa/view?usp=drivesdk)
+
+*Click the banner above to launch the interactive video player directly on Google Drive.*
 
 ---
 

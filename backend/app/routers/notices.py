@@ -11,7 +11,8 @@ router = APIRouter(prefix="/api/notices", tags=["Notices"])
 @router.post("", response_model=NoticeExtractionResponse)
 async def upload_and_process_notice(
     file: Optional[UploadFile] = File(None),
-    raw_text: Optional[str] = Form(None)
+    raw_text: Optional[str] = Form(None),
+    text: Optional[str] = Form(None)
 ):
     """
     Ingests a notice via PDF, image, or raw text.
@@ -22,6 +23,8 @@ async def upload_and_process_notice(
     extracted_text = ""
     page_count = 1
     image_data = None
+
+    input_text = (raw_text or text or "").strip()
 
     if file:
         filename = file.filename or "uploaded_notice"
@@ -35,10 +38,10 @@ async def upload_and_process_notice(
             extracted_text = f"Notice uploaded as image: {filename}"
         else:
             extracted_text = content_bytes.decode("utf-8", errors="ignore")
-    elif raw_text:
-        extracted_text = raw_text.strip()
+    elif input_text:
+        extracted_text = input_text
     else:
-        raise HTTPException(status_code=400, detail="Must provide either a file upload or raw_text")
+        raise HTTPException(status_code=400, detail="Must provide either a file upload or notice text")
 
     if not extracted_text and not image_data:
         raise HTTPException(status_code=400, detail="No readable content found in the provided notice")

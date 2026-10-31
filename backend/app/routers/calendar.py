@@ -6,6 +6,7 @@ from app.database import get_notice, get_google_token
 router = APIRouter(prefix="/api/notices", tags=["Calendar"])
 
 @router.get("/{notice_id}/calendar.ics")
+@router.get("/{notice_id}/export-calendar")
 async def download_ics_calendar(notice_id: str):
     """
     Downloads an RFC 5545 compliant .ics calendar file containing all notice deadlines.

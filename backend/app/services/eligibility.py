@@ -1,24 +1,31 @@
+import re
 from typing import Dict, Any, List, Optional
 from app.schemas import EligibilityResultSchema
 
 BRANCH_ALIASES = {
-    "cse": ["cse", "computer science", "computer science and engineering", "cs"],
-    "it": ["it", "information technology"],
-    "ece": ["ece", "electronics and communication", "electronics and communication engineering", "electronics"],
+    "cse": ["cse", "computer science", "computer science and engineering", "computer science & engineering", "cs"],
+    "it": ["it", "information technology", "info tech"],
+    "ece": ["ece", "electronics and communication", "electronics & communication", "electronics and communication engineering", "electronics & communication engineering", "electronics"],
     "ee": ["ee", "electrical engineering", "electrical"],
     "me": ["me", "mechanical engineering", "mechanical"],
     "ce": ["ce", "civil engineering", "civil"],
     "ch": ["ch", "chemical engineering", "chemical"],
-    "bt": ["bt", "biotech", "biotechnology"],
+    "bt": ["bt", "biotech", "biotechnology", "bio technology"],
     "mca": ["mca", "master of computer applications"]
 }
 
 def normalize_branch(b: str) -> str:
-    cleaned = b.strip().lower()
+    cleaned = b.strip().lower().replace("&", "and")
+    cleaned_alphanumeric = re.sub(r'[^a-z0-9\s]', '', cleaned)
+    cleaned_norm = ' '.join(cleaned_alphanumeric.split())
     for canonical, aliases in BRANCH_ALIASES.items():
-        if cleaned == canonical or cleaned in aliases:
+        if cleaned_norm == canonical or cleaned_norm in aliases:
             return canonical
-    return cleaned
+        for a in aliases:
+            a_norm = ' '.join(re.sub(r'[^a-z0-9\s]', '', a.replace("&", "and")).split())
+            if a_norm == cleaned_norm or a_norm in cleaned_norm or cleaned_norm in a_norm:
+                return canonical
+    return cleaned_norm
 
 def check_branch_match(student_branch: str, allowed_branches: List[str]) -> bool:
     if not allowed_branches or any("all" in b.lower() for b in allowed_branches):

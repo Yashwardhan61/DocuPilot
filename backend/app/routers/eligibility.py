@@ -16,23 +16,50 @@ async def check_notice_eligibility(
 ):
     """
     Deterministically computes student eligibility for a specific notice.
-    Compares student's branch, year, CGPA, and backlogs with extracted notice rules.
+    Uses query parameters when supplied, otherwise uses the saved profile.
     """
+
     notice = get_notice(notice_id)
+
     if not notice:
         raise HTTPException(status_code=404, detail="Notice not found")
 
-    saved_profile = get_profile("default_user") or {}
-    profile = {
-        "branch": branch if branch is not None else saved_profile.get("branch", "CSE"),
-        "year": year if year is not None else saved_profile.get("year", "3rd"),
-        "cgpa": cgpa if cgpa is not None else saved_profile.get("cgpa", 8.0),
-        "active_backlogs": active_backlogs if active_backlogs is not None else saved_profile.get("active_backlogs", False)
-    }
+    saved_profile = get_profile("default_user")
+
+    # Use the saved profile if available.
+    profile = saved_profile or {}
+
+    # Query parameters override saved profile values.
+    if branch is not None:
+        profile["branch"] = branch
+
+    if year is not None:
+        profile["year"] = year
+
+    if cgpa is not None:
+        profile["cgpa"] = cgpa
+
+    if active_backlogs is not None:
+        profile["active_backlogs"] = active_backlogs
+
+    # Do not evaluate eligibility with incomplete or fictional details.
+    required_fields = ["branch", "year", "cgpa", "active_backlogs"]
+    missing_fields = [
+        field for field in required_fields
+        if field not in profile or profile[field] is None
+    ]
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Please create your student profile before checking eligibility.",
+                "missing_fields": missing_fields
+            }
+        )
 
     extraction = notice.get("extraction", {})
     rules = extraction.get("eligibility", {})
 
     result = evaluate_eligibility(profile, rules)
     return result
-

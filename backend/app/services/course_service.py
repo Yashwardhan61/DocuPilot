@@ -20,14 +20,8 @@ COURSE_CATALOG: Dict[str, Dict[str, Any]] = {
     "mca": {
         "canonical": "MCA",
         "name": "Master of Computer Applications",
-        "duration": 2,
-        "aliases": ["mca", "m.c.a", "master of computer applications", "master in computer applications"]
-    },
-    "mca3": {
-        "canonical": "MCA (3-Year)",
-        "name": "Master of Computer Applications (3-Year Curriculum)",
         "duration": 3,
-        "aliases": ["mca 3", "mca (3-year)", "mca 3-year", "3 year mca", "3-year mca"]
+        "aliases": ["mca", "m.c.a", "master of computer applications", "master in computer applications", "mca 3", "3 year mca"]
     },
     "mba": {
         "canonical": "MBA",
@@ -176,7 +170,7 @@ async def analyze_course_with_ai(course_query: str) -> Dict[str, Any]:
 
     system_prompt = (
         "You are an academic curriculum coordinator. Given an academic degree or course title, "
-        "determine its standard duration in years (e.g. B.Tech is 4, M.Tech is 2, MCA is 2, MBA is 2, M.Sc is 2, B.Arch is 5, Ph.D. is 5). "
+        "determine its standard duration in years (e.g. B.Tech is 4, M.Tech is 2, MCA is 3, MBA is 2, M.Sc is 2, B.Arch is 5, Ph.D. is 5). "
         "Return ONLY a JSON object with this exact structure: "
         '{"canonical_name": "string", "duration_years": 2, "description": "string"}'
     )

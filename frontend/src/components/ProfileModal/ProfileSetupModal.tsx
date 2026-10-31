@@ -53,11 +53,12 @@ export const COURSES: CourseDefinition[] = [
   {
     id: 'MCA',
     name: 'MCA',
-    desc: 'Master of Computer Applications (2 Years)',
-    duration: 2,
+    desc: 'Master of Computer Applications (3 Years)',
+    duration: 3,
     years: [
-      { id: '1st', label: '1st Year', yearNumber: 1, isPreFinal: true },
-      { id: '2nd', label: '2nd Year', yearNumber: 2, isFinal: true },
+      { id: '1st', label: '1st Year', yearNumber: 1 },
+      { id: '2nd', label: '2nd Year', yearNumber: 2, isPreFinal: true },
+      { id: '3rd', label: '3rd Year', yearNumber: 3, isFinal: true },
     ],
   },
   {

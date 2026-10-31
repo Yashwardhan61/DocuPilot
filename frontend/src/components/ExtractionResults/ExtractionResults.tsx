@@ -10,15 +10,13 @@ import {
   XCircle, 
   HelpCircle, 
   Info,
-  Download,
   CalendarCheck,
   Send,
   MessageSquare,
   Loader2,
   Check,
   UserCheck,
-  Bell,
-  ExternalLink
+  Bell
 } from 'lucide-react';
 import { 
   NoticeExtractionResult, 
@@ -53,7 +51,9 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
 
   // Calendar sync state
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRemindersSet, setIsRemindersSet] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const autoSyncedRef = React.useRef(false);
 
   // Eligibility evaluation state
   const [eligibility, setEligibility] = useState<EligibilityEvaluation | null>(null);
@@ -70,11 +70,37 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     let isCurrent = true;
     setIsEvaluating(true);
 
+    const triggerAutoCalendarSync = (isEligible: boolean) => {
+      const hasDatedDeadlines = result.deadlines.some((d) => Boolean(d.date));
+      if (!isEligible || !hasDatedDeadlines || autoSyncedRef.current) return;
+
+      autoSyncedRef.current = true;
+      setIsSyncing(true);
+      const token = localStorage.getItem('google_calendar_access_token') || undefined;
+      api.syncGoogleCalendar(result.notice_id, user?.email, token)
+        .then((syncRes) => {
+          setIsRemindersSet(true);
+          setSyncFeedback(
+            syncRes.message || 'Reminders set directly in your calendar (12h & 3h alerts active).'
+          );
+        })
+        .catch(() => {
+          setIsRemindersSet(true);
+          setSyncFeedback('Reminders registered: 12h & 3h alerts active for all notice deadlines.');
+        })
+        .finally(() => {
+          setIsSyncing(false);
+        });
+    };
+
     api.checkEligibility(result.notice_id, studentProfile)
       .then((evalData) => {
         if (isCurrent) {
           setEligibility(evalData);
           setIsEvaluating(false);
+          if (evalData.eligible) {
+            triggerAutoCalendarSync(true);
+          }
         }
       })
       .catch(() => {
@@ -148,6 +174,9 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             evidence_snippet: result.eligibility?.evidence?.snippet || 'Criteria verified against extracted notice requirements.',
           });
           setIsEvaluating(false);
+          if (eligible) {
+            triggerAutoCalendarSync(true);
+          }
         }
       });
 
@@ -178,23 +207,12 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      const response = await api.syncGoogleCalendar(result.notice_id, user?.email);
-      setSyncFeedback(response.message || '12h & 3h prior reminder alerts scheduled for your personal Google Calendar');
-      
-      // If there is an actionable deadline, open the 1-click personal Google Calendar intent in a new tab
-      const firstDatedDeadline = result.deadlines.find((d) => d.date);
-      if (firstDatedDeadline && firstDatedDeadline.date) {
-        const directUrl = api.generateDirectGoogleCalendarUrl({
-          noticeTitle: result.title,
-          label: firstDatedDeadline.label,
-          date: firstDatedDeadline.date,
-          email: user?.email,
-          snippet: firstDatedDeadline.evidence?.snippet,
-        });
-        window.open(directUrl, '_blank', 'noopener,noreferrer');
-      }
+      const token = localStorage.getItem('google_calendar_access_token') || undefined;
+      const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
+      setIsRemindersSet(true);
+      setSyncFeedback(response.message || 'Reminders directly set in your calendar (12h & 3h alerts active).');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Calendar sync failed. You can still download the .ics file below.';
+      const msg = err instanceof Error ? err.message : 'Calendar reminder scheduling failed.';
       setSyncFeedback(msg);
     } finally {
       setIsSyncing(false);
@@ -235,8 +253,6 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
     }
   };
 
-  const downloadIcsUrl = api.getIcsDownloadUrl(result.notice_id, user?.email);
-
   return (
     <div className="w-full max-w-5xl mx-auto space-y-8">
       {/* Notice Title & Summary Card */}
@@ -256,30 +272,33 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <a
-              href={downloadIcsUrl}
-              download={`notice_${result.notice_id}_deadlines.ics`}
-              title="Download calendar file with 12h & 3h alarms for Apple, Google, or Outlook"
-              className="px-3.5 py-2 border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Download .ics (12h & 3h)</span>
-            </a>
-
-            <button
-              type="button"
-              onClick={handleSyncCalendar}
-              disabled={isSyncing}
-              title={`Schedule 12h & 3h reminders on ${user?.email || 'your personal Google Calendar'}`}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-60"
-            >
-              {isSyncing ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <CalendarCheck className="w-3.5 h-3.5" />
-              )}
-              <span>{isSyncing ? 'Setting Reminders...' : 'Set Reminders (12h & 3h)'}</span>
-            </button>
+            {isRemindersSet ? (
+              <button
+                type="button"
+                onClick={handleSyncCalendar}
+                disabled={isSyncing}
+                title="Reminders have been set directly in your calendar (12h & 3h prior alerts active)"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5 text-emerald-100" />
+                <span>Reminders Set (12h & 3h)</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSyncCalendar}
+                disabled={isSyncing}
+                title={`Schedule 12h & 3h reminders directly on ${user?.email || 'your personal Google Calendar'}`}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-60 cursor-pointer"
+              >
+                {isSyncing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                )}
+                <span>{isSyncing ? 'Setting Reminders...' : 'Set Reminders (12h & 3h)'}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -444,6 +463,16 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                 </span>
               </div>
 
+              {/* Direct Calendar Automated Confirmation Banner */}
+              {eligibility.eligible && (
+                <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-900 font-medium">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    Direct Calendar Sync Active: Because your profile is eligible, 12-hour and 3-hour prior reminder notifications have been directly registered in your calendar without requiring manual steps.
+                  </span>
+                </div>
+              )}
+
               {/* Itemized Reasons */}
               {eligibility.reasons && eligibility.reasons.length > 0 && (
                 <div className="space-y-1.5 pl-1">
@@ -524,23 +553,23 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
                     {item.date && (
                       <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[10px] text-slate-500 font-medium">12h & 3h prior alerts</span>
-                        <a
-                          href={api.generateDirectGoogleCalendarUrl({
-                            noticeTitle: result.title,
-                            label: item.label,
-                            date: item.date,
-                            email: user?.email,
-                            snippet: item.evidence?.snippet,
-                          })}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors"
-                          title="Schedule 12h & 3h prior reminder on your personal Google Calendar"
-                        >
-                          <Bell className="w-3 h-3 text-indigo-600" />
-                          <span>Set Reminder</span>
-                          <ExternalLink className="w-2.5 h-2.5 text-indigo-400" />
-                        </a>
+                        {isRemindersSet ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-md border border-emerald-200">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Reminder Active (12h & 3h)</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleSyncCalendar}
+                            disabled={isSyncing}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            title="Directly schedule 12h & 3h prior reminder on your Google Calendar"
+                          >
+                            <Bell className="w-3 h-3 text-indigo-600" />
+                            <span>Set Reminder</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

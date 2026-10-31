@@ -142,9 +142,6 @@ const AppInner: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-slate-900 tracking-tight">DocuPilot</h1>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                  Track 1 Next-Gen Agent
-                </span>
               </div>
               <p className="text-xs text-slate-500">Notice-to-Action for MNNIT Allahabad</p>
             </div>

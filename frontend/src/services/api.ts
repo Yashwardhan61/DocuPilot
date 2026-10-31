@@ -165,13 +165,21 @@ export const api = {
     return data.answer;
   },
 
-  // Sync to Google Calendar with 12h & 3h prior reminders
-  async syncGoogleCalendar(noticeId: string, email?: string): Promise<CalendarSyncResponse> {
-    const url = email 
-      ? `${API_BASE}/notices/${noticeId}/sync-google-calendar?email=${encodeURIComponent(email)}`
-      : `${API_BASE}/notices/${noticeId}/sync-google-calendar`;
-    const response = await fetch(url, {
+  // Sync to Google Calendar with 12h & 3h prior reminders directly
+  async syncGoogleCalendar(noticeId: string, email?: string, accessToken?: string): Promise<CalendarSyncResponse> {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (accessToken) params.append('access_token', accessToken);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const headers: Record<string, string> = {};
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE}/notices/${noticeId}/sync-google-calendar${query}`, {
       method: 'POST',
+      headers,
     });
 
     if (!response.ok) {

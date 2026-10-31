@@ -46,9 +46,6 @@ backend/uploads/*
 
 # Tests & Pytest
 .pytest_cache/
-tests/
-test_*.py
-pytest.ini
 
 # IDE & OS
 .DS_Store

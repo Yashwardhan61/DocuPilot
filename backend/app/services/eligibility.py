@@ -38,18 +38,91 @@ def check_branch_match(student_branch: str, allowed_branches: List[str]) -> bool
             return True
     return False
 
-def check_year_match(student_year: str, allowed_years: List[str]) -> bool:
-    if not allowed_years or any("all" in y.lower() for y in allowed_years):
+def extract_canonical_years(text: str) -> set[str]:
+    """
+    Extracts canonical academic year representations ('1', '2', '3', '4') from free-form text.
+    Recognizes university & MNNIT academic year terminology:
+      - 3rd year = Pre-final year / Penultimate year
+      - 4th year = Final year / Graduating batch
+      - 2nd year = Second year / Sophomore
+      - 1st year = First year / Fresher
+    Guards against GPA decimals (3.5, 4.0) and calendar years (2024, 2026).
+    """
+    if not text:
+        return set()
+
+    cleaned = str(text).lower().strip()
+    
+    # Check for wildcards / open to all
+    if any(w in cleaned for w in ["all", "any", "open to all", "every", "all years", "all batches"]):
+        return {"1", "2", "3", "4"}
+
+    matched_years = set()
+
+    # Pre-final year / 3rd year patterns
+    pre_final_regex = re.compile(
+        r'(?<![\.\d])\b(?:pre[-\s]?final(?:\s*year)?|penultimate(?:\s*year)?|third(?:\s*year)?|3rd(?:\s*year)?|3(?:rd)?)\b(?![\.\d])',
+        re.IGNORECASE
+    )
+    if pre_final_regex.search(cleaned):
+        matched_years.add("3")
+
+    # Final year / 4th year patterns (negative lookbehind ensures "pre-final" does not match "final")
+    final_regex = re.compile(
+        r'(?<!pre[-\s])(?<!pre)(?<![\.\d])\b(?:final(?:\s*year)?|graduating(?:\s*batch|\s*year)?|passing\s*out(?:\s*batch)?|fourth(?:\s*year)?|4th(?:\s*year)?|4(?:th)?)\b(?![\.\d])',
+        re.IGNORECASE
+    )
+    if final_regex.search(cleaned):
+        matched_years.add("4")
+
+    # 2nd year patterns
+    second_regex = re.compile(
+        r'(?<![\.\d])\b(?:second(?:\s*year)?|2nd(?:\s*year)?|2(?:nd)?|sophomore(?:s)?)\b(?![\.\d])',
+        re.IGNORECASE
+    )
+    if second_regex.search(cleaned):
+        matched_years.add("2")
+
+    # 1st year patterns
+    first_regex = re.compile(
+        r'(?<![\.\d])\b(?:first(?:\s*year)?|1st(?:\s*year)?|1(?:st)?|fresher(?:s)?|freshman)\b(?![\.\d])',
+        re.IGNORECASE
+    )
+    if first_regex.search(cleaned):
+        matched_years.add("1")
+
+    return matched_years
+
+def check_year_match(student_year: Any, allowed_years: List[Any]) -> bool:
+    if not allowed_years or any("all" in str(y).lower() for y in allowed_years if y is not None):
         return True
     
-    # Extract digits: '3rd' -> '3', '3rd year' -> '3'
-    cleaned_student = ''.join(c for c in student_year if c.isdigit())
+    if student_year is None:
+        return False
+
+    student_str = str(student_year).strip()
+    if not student_str:
+        return False
+
+    student_canonical = extract_canonical_years(student_str)
+    if not student_canonical:
+        cleaned_student = ''.join(c for c in student_str if c.isdigit())
+        student_canonical = {cleaned_student} if cleaned_student else {student_str.lower()}
+
     for y in allowed_years:
-        cleaned_allowed = ''.join(c for c in y if c.isdigit())
-        if cleaned_student and cleaned_allowed and cleaned_student == cleaned_allowed:
+        if y is None:
+            continue
+        y_str = str(y).strip()
+        if not y_str:
+            continue
+        
+        allowed_canonical = extract_canonical_years(y_str)
+        if student_canonical.intersection(allowed_canonical):
             return True
-        if student_year.strip().lower() == y.strip().lower():
+        
+        if student_str.lower() == y_str.lower():
             return True
+            
     return False
 
 def evaluate_eligibility(profile: Dict[str, Any], eligibility_rules: Dict[str, Any]) -> EligibilityResultSchema:

@@ -18,13 +18,21 @@ def normalize_branch(b: str) -> str:
     cleaned = b.strip().lower().replace("&", "and")
     cleaned_alphanumeric = re.sub(r'[^a-z0-9\s]', '', cleaned)
     cleaned_norm = ' '.join(cleaned_alphanumeric.split())
+    
+    # 1. Exact match check
     for canonical, aliases in BRANCH_ALIASES.items():
         if cleaned_norm == canonical or cleaned_norm in aliases:
             return canonical
+
+    # 2. Whole phrase or word-boundary match (prevents 'cs' from matching inside 'electronics')
+    for canonical, aliases in BRANCH_ALIASES.items():
         for a in aliases:
             a_norm = ' '.join(re.sub(r'[^a-z0-9\s]', '', a.replace("&", "and")).split())
-            if a_norm == cleaned_norm or a_norm in cleaned_norm or cleaned_norm in a_norm:
+            if a_norm == cleaned_norm or cleaned_norm == a_norm:
                 return canonical
+            if re.search(r'\b' + re.escape(a_norm) + r'\b', cleaned_norm):
+                return canonical
+
     return cleaned_norm
 
 def check_branch_match(student_branch: str, allowed_branches: List[str]) -> bool:

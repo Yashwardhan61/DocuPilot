@@ -118,6 +118,25 @@ export const NoticeUpload: React.FC<NoticeUploadProps> = ({ onExtract, isProcess
     }
   };
 
+  const handleLoadSample = () => {
+    setActiveTab('paste');
+    setPastedText(
+      'Training and Placement Cell, MNNIT Allahabad\n' +
+      'Notice: Campus Recruitment Drive 2026-27 for Google India Software Engineering Intern.\n\n' +
+      'Eligible Candidates: Pre-Final Year B.Tech (Computer Science, Information Tech, Electronics & Communication) and 2nd Year MCA students.\n' +
+      'Academic Criteria: Minimum CGPA of 7.50 with zero active backlogs at the time of portal registration.\n\n' +
+      'Key Deadlines:\n' +
+      '1. T&P Portal Registration & Resume Submission: 5th November 2026, 5:00 PM.\n' +
+      '2. Online Coding Challenge: 12th November 2026 (Tentative date, assessment link sent 24h prior).\n' +
+      '3. Technical and HR Interviews: To be notified following coding round results.\n\n' +
+      'Required Documents:\n' +
+      '- Latest verified semester grade cards authenticated by academic section.\n' +
+      '- Standard single-page resume adhering to official MNNIT template.\n' +
+      '- Copy of valid college identity card.'
+    );
+    setTextError(null);
+  };
+
   const isFileValid = file !== null && fileError === null;
   const isTextValid = pastedText.trim().length >= MIN_TEXT_CHARS && pastedText.length <= MAX_TEXT_CHARS;
   const canSubmit = activeTab === 'upload' ? isFileValid : isTextValid;
@@ -135,35 +154,47 @@ export const NoticeUpload: React.FC<NoticeUploadProps> = ({ onExtract, isProcess
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 bg-slate-50/50" role="tablist">
+      {/* Navigation Tabs & Sample Notice Quick Button */}
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/50 px-2">
+        <div className="flex flex-1" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'upload'}
+            onClick={() => setActiveTab('upload')}
+            className={`flex-1 py-3.5 px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              activeTab === 'upload'
+                ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+            }`}
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Upload File</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'paste'}
+            onClick={() => setActiveTab('paste')}
+            className={`flex-1 py-3.5 px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              activeTab === 'paste'
+                ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Paste Text</span>
+          </button>
+        </div>
+
         <button
           type="button"
-          role="tab"
-          aria-selected={activeTab === 'upload'}
-          onClick={() => setActiveTab('upload')}
-          className={`flex-1 py-3.5 px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-            activeTab === 'upload'
-              ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-          }`}
+          onClick={handleLoadSample}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors inline-flex items-center gap-1.5 ml-2"
+          title="Pre-populate with a real MNNIT placement circular"
         >
-          <UploadCloud className="w-4 h-4" />
-          <span>Upload File</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'paste'}
-          onClick={() => setActiveTab('paste')}
-          className={`flex-1 py-3.5 px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-            activeTab === 'paste'
-              ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Paste Text</span>
+          <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+          <span className="hidden sm:inline">Try Sample Notice</span>
         </button>
       </div>
 
@@ -269,7 +300,7 @@ export const NoticeUpload: React.FC<NoticeUploadProps> = ({ onExtract, isProcess
                   </span>
                 ) : (
                   <span className="text-emerald-600 font-medium">
-                    ✓ {pastedText.length} characters (meets minimum)
+                    {pastedText.length} characters (meets minimum)
                   </span>
                 )}
               </span>

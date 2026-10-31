@@ -9,76 +9,6 @@ import { NoticeExtractionResult, ProcessingStep, Evidence, StudentProfile } from
 import { Compass, Sparkles, UserCheck, Shield, LogOut, User } from 'lucide-react';
 import { api } from './services/api';
 
-// Sample MNNIT notice extraction result for demonstration and fallback
-const SAMPLE_MNNIT_RESULT: NoticeExtractionResult = {
-  notice_id: 'mnnit-tnp-2026-104',
-  title: 'Campus Recruitment Drive 2026-27: Google India Software Engineering Intern',
-  summary:
-    'Training and Placement Cell, MNNIT Allahabad invites applications from eligible Pre-Final Year B.Tech and MCA students for Summer Internship 2027.',
-  deadlines: [
-    {
-      id: 'd-1',
-      label: 'Portal Registration & Resume Submission',
-      date: '2026-11-05',
-      needs_confirmation: false,
-      evidence: {
-        snippet: 'Interested candidates must register on the T&P portal and upload their resume by 5th Nov 2026, 5:00 PM.',
-        page: 1,
-      },
-    },
-    {
-      id: 'd-2',
-      label: 'Online Coding Challenge',
-      date: '2026-11-12',
-      needs_confirmation: true,
-      evidence: {
-        snippet: 'The online assessment link will be active tentatively around 12th November; students will receive confirmation 24 hours prior.',
-        page: 1,
-      },
-    },
-    {
-      id: 'd-3',
-      label: 'Technical & HR Interviews',
-      date: null,
-      needs_confirmation: true,
-      evidence: {
-        snippet: 'Interview rounds will commence immediately after shortlisting results are declared by the recruiter.',
-        page: 2,
-      },
-    },
-  ],
-  eligibility: {
-    branches: ['Computer Science', 'Information Tech', 'Electronics & Comm.'],
-    years: ['3rd Year B.Tech', '2nd Year MCA'],
-    min_cgpa: 7.5,
-    other_conditions: [
-      'No active backlogs at the time of registration',
-      'Minimum 70% in Class 10th and 12th board exams',
-    ],
-    evidence: {
-      snippet: 'Eligibility: B.Tech (CSE, IT, ECE) & MCA candidates having CGPA >= 7.50 with zero current backlogs.',
-      page: 1,
-    },
-  },
-  required_documents: [
-    {
-      id: 'doc-1',
-      name: 'Latest Verified College Grade Card (All Semesters)',
-      evidence: { snippet: 'Students must submit semester grade sheets authenticated by the academic section.', page: 2 },
-    },
-    {
-      id: 'doc-2',
-      name: 'Single Page Resume (PDF format)',
-      evidence: { snippet: 'Submit standard 1-page resume strictly adhering to MNNIT T&P template.', page: 2 },
-    },
-    {
-      id: 'doc-3',
-      name: 'College Identity Card Copy',
-      evidence: { snippet: 'Self-attested copy of valid MNNIT student ID card is mandatory.', page: 2 },
-    },
-  ],
-};
-
 // Inner App (rendered only when authenticated)
 const AppInner: React.FC = () => {
   const { user, logout } = useAuth();
@@ -141,14 +71,8 @@ const AppInner: React.FC = () => {
       window.clearTimeout(timer2);
       window.clearTimeout(timer3);
 
-      // In case backend is not reachable or returns error, fall back to sample for smooth demo
-      if (input.type === 'text' && input.text.includes('Demo')) {
-        setExtractionResult(SAMPLE_MNNIT_RESULT);
-        setViewState('results');
-      } else {
-        const message = err instanceof Error ? err.message : 'Notice extraction failed. Please check backend connection.';
-        setError(message);
-      }
+      const message = err instanceof Error ? err.message : 'Notice extraction failed. Please ensure backend is running.';
+      setError(message);
     }
   };
 

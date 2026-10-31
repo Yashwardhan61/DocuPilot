@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import urllib.parse
 from typing import Dict, Any, List, Optional
 
@@ -80,7 +80,7 @@ class CalendarService:
                 "Automated notice reminder synchronized by DocuPilot."
             ),
             "start": {"date": date_str},
-            "end": {"date": date_str},
+            "end": {"date": (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") if len(date_str) == 10 and "-" in date_str else date_str},
             "reminders": {
                 "useDefault": False,
                 "overrides": [
@@ -187,9 +187,17 @@ class CalendarService:
             "Content-Type": "application/json"
         }
 
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
         async with httpx.AsyncClient(timeout=20.0) as client:
             for item in deadlines:
-                if not item.get("date"):
+                date_val = item.get("date")
+                if not date_val:
+                    continue
+
+                # Omit past deadlines
+                date_str = str(date_val)[:10]
+                if date_str < today_str:
                     continue
 
                 event_body = CalendarService.build_google_calendar_event_body(
@@ -207,5 +215,13 @@ class CalendarService:
                         "summary": event_body["summary"],
                         "htmlLink": ev.get("htmlLink", "")
                     })
+                else:
+                    try:
+                        err_data = resp.json()
+                        err_msg = err_data.get("error", {}).get("message", resp.text)
+                    except Exception:
+                        err_msg = resp.text
+                    if resp.status_code in [401, 403]:
+                        raise RuntimeError(f"Google Calendar authorization rejected ({resp.status_code}): {err_msg}")
 
         return created_events

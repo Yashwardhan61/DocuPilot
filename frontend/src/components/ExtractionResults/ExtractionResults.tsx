@@ -22,10 +22,12 @@ import {
   NoticeExtractionResult, 
   Evidence, 
   StudentProfile, 
-  EligibilityEvaluation 
+  EligibilityEvaluation,
+  DeadlineItem
 } from '../../types/notice';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { auth, googleProvider, signInWithPopup, GoogleAuthProvider } from '../../services/firebase';
 import { COURSES, getYearsForCourse } from '../ProfileModal/ProfileSetupModal';
 
 interface ExtractionResultsProps {
@@ -65,14 +67,47 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
   const [qaHistory, setQaHistory] = useState<Array<{ question: string; answer: string }>>([]);
   const [qaError, setQaError] = useState<string | null>(null);
 
+  const parseDateToObj = (dateString: string | null | undefined): Date | null => {
+    if (!dateString) return null;
+    try {
+      const parts = dateString.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        return new Date(year, month, day, 23, 59, 59, 999);
+      }
+      const dmy = dateString.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+      if (dmy) {
+        return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10), 23, 59, 59, 999);
+      }
+      const parsed = new Date(dateString);
+      if (!isNaN(parsed.getTime())) {
+        parsed.setHours(23, 59, 59, 999);
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  const isDatePassed = (dateString: string | null | undefined): boolean => {
+    const d = parseDateToObj(dateString);
+    if (!d) return false;
+    return d.getTime() < Date.now();
+  };
+
+  const allDeadlinesPassed = result.deadlines.length > 0 && result.deadlines.every((d) => Boolean(d.date) && isDatePassed(d.date));
+
   // Run eligibility check when notice or profile changes
   useEffect(() => {
     let isCurrent = true;
     setIsEvaluating(true);
 
     const triggerAutoCalendarSync = (isEligible: boolean) => {
-      const hasDatedDeadlines = result.deadlines.some((d) => Boolean(d.date));
-      if (!isEligible || !hasDatedDeadlines || autoSyncedRef.current) return;
+      const activeUpcoming = result.deadlines.filter((d) => Boolean(d.date) && !isDatePassed(d.date));
+      if (!isEligible || activeUpcoming.length === 0 || autoSyncedRef.current) return;
 
       autoSyncedRef.current = true;
       setIsSyncing(true);
@@ -81,12 +116,12 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
         .then((syncRes) => {
           setIsRemindersSet(true);
           setSyncFeedback(
-            syncRes.message || 'Reminders set directly in your calendar (12h & 3h alerts active).'
+            syncRes.message || 'Reminders directly entered into your calendar (12h & 3h alerts active).'
           );
         })
         .catch(() => {
           setIsRemindersSet(true);
-          setSyncFeedback('Reminders registered: 12h & 3h alerts active for all notice deadlines.');
+          setSyncFeedback('Reminders registered: 12h & 3h alerts active for upcoming notice deadlines.');
         })
         .finally(() => {
           setIsSyncing(false);
@@ -204,16 +239,98 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
   };
 
   const handleSyncCalendar = async () => {
+    const activeUpcoming = result.deadlines.filter((d) => Boolean(d.date) && !isDatePassed(d.date));
+    if (activeUpcoming.length === 0) {
+      setSyncFeedback('All notice deadlines have already passed; no reminders to schedule.');
+      return;
+    }
+
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
-      const token = localStorage.getItem('google_calendar_access_token') || undefined;
-      const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token);
+      let token = localStorage.getItem('google_calendar_access_token');
+      if (!token && user?.provider === 'google') {
+        try {
+          const popupRes = await signInWithPopup(auth, googleProvider);
+          const credential = GoogleAuthProvider.credentialFromResult(popupRes);
+          token = credential?.accessToken || null;
+          if (token) {
+            localStorage.setItem('google_calendar_access_token', token);
+          }
+        } catch (authErr) {
+          console.warn('Google Calendar authorization popup closed:', authErr);
+        }
+      }
+
+      const response = await api.syncGoogleCalendar(result.notice_id, user?.email, token || undefined);
       setIsRemindersSet(true);
-      setSyncFeedback(response.message || 'Reminders directly set in your calendar (12h & 3h alerts active).');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Calendar reminder scheduling failed.';
-      setSyncFeedback(msg);
+      setSyncFeedback(response.message || 'Reminders directly entered into your calendar (12h & 3h alerts active).');
+    } catch {
+      // Direct Calendar fallback: open first upcoming milestone directly in Google Calendar
+      const firstUpcoming = activeUpcoming[0];
+      if (firstUpcoming && firstUpcoming.date) {
+        const directUrl = api.generateDirectGoogleCalendarUrl({
+          noticeTitle: result.title,
+          label: firstUpcoming.label,
+          date: firstUpcoming.date,
+          email: user?.email,
+          snippet: firstUpcoming.evidence?.snippet,
+        });
+        window.open(directUrl, '_blank');
+        setIsRemindersSet(true);
+        setSyncFeedback('Direct Google Calendar reminder link opened with 12h & 3h alarms pre-filled.');
+      } else {
+        setSyncFeedback('Calendar reminder scheduling encountered an error.');
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSyncSingleDeadline = async (item: DeadlineItem) => {
+    if (!item.date || isDatePassed(item.date)) return;
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      let token = localStorage.getItem('google_calendar_access_token');
+      if (!token && user?.provider === 'google') {
+        try {
+          const popupRes = await signInWithPopup(auth, googleProvider);
+          const credential = GoogleAuthProvider.credentialFromResult(popupRes);
+          token = credential?.accessToken || null;
+          if (token) {
+            localStorage.setItem('google_calendar_access_token', token);
+          }
+        } catch {
+          // continue to fallback
+        }
+      }
+
+      if (token) {
+        await api.syncGoogleCalendar(result.notice_id, user?.email, token);
+        setIsRemindersSet(true);
+        setSyncFeedback(`Reminder scheduled directly in Google Calendar for ${item.label}.`);
+      } else {
+        const directUrl = api.generateDirectGoogleCalendarUrl({
+          noticeTitle: result.title,
+          label: item.label,
+          date: item.date,
+          email: user?.email,
+          snippet: item.evidence?.snippet,
+        });
+        window.open(directUrl, '_blank');
+        setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
+      }
+    } catch {
+      const directUrl = api.generateDirectGoogleCalendarUrl({
+        noticeTitle: result.title,
+        label: item.label,
+        date: item.date,
+        email: user?.email,
+        snippet: item.evidence?.snippet,
+      });
+      window.open(directUrl, '_blank');
+      setSyncFeedback(`Opened Google Calendar to save reminder for ${item.label}.`);
     } finally {
       setIsSyncing(false);
     }
@@ -272,7 +389,15 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {isRemindersSet ? (
+            {allDeadlinesPassed ? (
+              <span
+                title="All deadlines mentioned in this circular have already passed"
+                className="px-3.5 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Deadlines Passed (You missed it)</span>
+              </span>
+            ) : isRemindersSet ? (
               <button
                 type="button"
                 onClick={handleSyncCalendar}
@@ -303,7 +428,7 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
             <button
               type="button"
               onClick={onReset}
-              className="px-3.5 py-2 border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-2 border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
               <span>New Notice</span>
@@ -465,10 +590,20 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
 
               {/* Direct Calendar Automated Confirmation Banner */}
               {eligibility.eligible && (
-                <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-900 font-medium">
-                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className={`p-3 rounded-xl flex items-center gap-2.5 text-xs font-medium border ${
+                  allDeadlinesPassed 
+                    ? 'bg-amber-50 border-amber-200 text-amber-900' 
+                    : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
+                }`}>
+                  {allDeadlinesPassed ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
                   <span>
-                    Direct Calendar Sync Active: Because your profile is eligible, 12-hour and 3-hour prior reminder notifications have been directly registered in your calendar without requiring manual steps.
+                    {allDeadlinesPassed 
+                      ? 'Notice criteria met, but all deadlines in this circular have already passed (You missed it).'
+                      : 'Direct Calendar Sync Active: Because your profile is eligible, upcoming deadline reminders (12h & 3h alerts) have been registered directly in your calendar.'}
                   </span>
                 </div>
               )}
@@ -516,64 +651,93 @@ export const ExtractionResults: React.FC<ExtractionResultsProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {result.deadlines.map((item, idx) => (
-                  <div
-                    key={item.id || `deadline-${idx}`}
-                    className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-bold text-slate-800 leading-snug">
-                        {item.label}
-                      </p>
-                      {item.evidence && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenEvidence(item.label, item.evidence!)}
-                          aria-label={`View source for ${item.label}`}
-                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 hover:underline flex-shrink-0"
-                        >
-                          <FileSearch className="w-3 h-3" />
-                          <span>Source</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className={`font-semibold ${!item.date ? 'text-amber-600 italic' : 'text-slate-700'}`}>
-                        {formatDate(item.date)}
-                      </span>
-                      {item.needs_confirmation && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                          <AlertTriangle className="w-3 h-3 text-amber-600" />
-                          Needs confirmation
-                        </span>
-                      )}
-                    </div>
-
-                    {item.date && (
-                      <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-500 font-medium">12h & 3h prior alerts</span>
-                        {isRemindersSet ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-md border border-emerald-200">
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Reminder Active (12h & 3h)</span>
-                          </span>
-                        ) : (
+                {result.deadlines.map((item, idx) => {
+                  const passed = isDatePassed(item.date);
+                  return (
+                    <div
+                      key={item.id || `deadline-${idx}`}
+                      className={`p-3.5 rounded-xl border space-y-2 ${
+                        passed 
+                          ? 'bg-rose-50/40 border-rose-200/70' 
+                          : 'bg-slate-50/80 border-slate-200/80'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-xs font-bold leading-snug ${passed ? 'text-rose-950' : 'text-slate-800'}`}>
+                          {item.label}
+                        </p>
+                        {item.evidence && (
                           <button
                             type="button"
-                            onClick={handleSyncCalendar}
-                            disabled={isSyncing}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
-                            title="Directly schedule 12h & 3h prior reminder on your Google Calendar"
+                            onClick={() => onOpenEvidence(item.label, item.evidence!)}
+                            aria-label={`View source for ${item.label}`}
+                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 hover:underline flex-shrink-0"
                           >
-                            <Bell className="w-3 h-3 text-indigo-600" />
-                            <span>Set Reminder</span>
+                            <FileSearch className="w-3 h-3" />
+                            <span>Source</span>
                           </button>
                         )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`font-semibold ${!item.date ? 'text-amber-600 italic' : passed ? 'text-rose-700 line-through' : 'text-slate-700'}`}>
+                          {formatDate(item.date)}
+                        </span>
+                        {passed ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>You missed it</span>
+                          </span>
+                        ) : item.needs_confirmation ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            Needs confirmation
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            Active
+                          </span>
+                        )}
+                      </div>
+
+                      {item.date && (
+                        <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
+                          {passed ? (
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-[11px] font-medium text-rose-600">Deadline has passed</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-rose-700 bg-rose-50 rounded-md border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" />
+                                <span>You missed it</span>
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-[10px] text-slate-500 font-medium">12h & 3h prior alerts</span>
+                              {isRemindersSet ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-md border border-emerald-200">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>Reminder Active (12h & 3h)</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncSingleDeadline(item)}
+                                  disabled={isSyncing}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                                  title="Directly schedule 12h & 3h prior reminder on your Google Calendar"
+                                >
+                                  <Bell className="w-3 h-3 text-indigo-600" />
+                                  <span>Set Reminder</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

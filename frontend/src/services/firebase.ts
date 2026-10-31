@@ -73,12 +73,14 @@ export const app: FirebaseApp = getApps().length > 0
 // Initialize Firebase Auth
 export const auth: Auth = getAuth(app);
 
-// Configure Google Auth Provider with Profile and Email scopes (non-sensitive for smooth verification)
+// Configure Google Auth Provider with Profile, Email, and Google Calendar scopes
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
+googleProvider.addScope('https://www.googleapis.com/auth/calendar');
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });

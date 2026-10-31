@@ -63,14 +63,24 @@ async def sync_notice_to_google_calendar(
 
     active_token = access_token or bearer_token or (token_record.get("access_token") if token_record else None)
 
-    dated_deadlines = [d for d in deadlines if d.get("date")]
+    from datetime import datetime, timezone
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    upcoming_deadlines = [d for d in deadlines if d.get("date") and str(d.get("date"))[:10] >= today_str]
+
+    if not upcoming_deadlines and [d for d in deadlines if d.get("date")]:
+        return GoogleCalendarSyncResponse(
+            success=True,
+            synced_events_count=0,
+            events=[],
+            message="Notice deadline(s) have already passed. You missed it."
+        )
 
     if active_token:
         # Mock token handling for testing
         if active_token.startswith("ya29.mock"):
             return GoogleCalendarSyncResponse(
                 success=True,
-                synced_events_count=max(1, len(dated_deadlines)),
+                synced_events_count=max(1, len(upcoming_deadlines)),
                 events=[],
                 message="Successfully scheduled automated reminders directly in your personal Google Calendar."
             )
@@ -79,7 +89,7 @@ async def sync_notice_to_google_calendar(
             events = await CalendarService.sync_to_google_calendar(
                 access_token=active_token,
                 notice_title=title,
-                deadlines=deadlines,
+                deadlines=upcoming_deadlines,
                 student_email=email
             )
             return GoogleCalendarSyncResponse(
@@ -88,19 +98,20 @@ async def sync_notice_to_google_calendar(
                 events=events,
                 message=f"Successfully scheduled {len(events)} automated reminders with 12h & 3h prior alarms directly in your personal Google Calendar."
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            if access_token or bearer_token:
+                raise HTTPException(status_code=400, detail=str(exc))
 
-    # Direct automated reminder registration response
+    # Direct automated reminder registration response for upcoming milestones
     simulated_events = []
-    for d in dated_deadlines:
+    for d in upcoming_deadlines:
         direct_url = CalendarService.generate_google_calendar_url(
             notice_title=title,
             deadline_item=d,
             student_email=email
         )
         simulated_events.append({
-            "event_id": f"evt_{d['date'].replace('-', '')}",
+            "event_id": f"evt_{str(d['date']).replace('-', '')}",
             "summary": f"[DocuPilot] {d.get('label', 'Deadline')}",
             "htmlLink": direct_url,
             "direct_calendar_url": direct_url
@@ -110,5 +121,5 @@ async def sync_notice_to_google_calendar(
         success=True,
         synced_events_count=len(simulated_events),
         events=simulated_events,
-        message="Automated reminders scheduled: 12h & 3h prior alerts active for all deadlines."
+        message=f"Automated reminders scheduled: 12h & 3h prior alerts active for {len(simulated_events)} upcoming deadline(s)."
     )

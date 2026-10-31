@@ -30,6 +30,10 @@ The following rules and workflows are mandatory and strictly enforced across all
 - Simulate thousands of simultaneous users using the application concurrently.
 - Identify throughput bottlenecks, race conditions, memory leaks, high latency, and breaking points under stress.
 
+### 5. Post-Testing Cleanup: Delete Test Files After Testing
+- After full testing, verification, and adversarial reviews are complete and all tests pass, delete all temporary test files, load scripts, and testing suites.
+- Keep the production repository clean and free of test clutter.
+
 ---
 
 ## Project Structure
@@ -44,4 +48,3 @@ The following rules and workflows are mandatory and strictly enforced across all
 
 ## Common Commands
 *(To be updated as build and run scripts are added)*
-
